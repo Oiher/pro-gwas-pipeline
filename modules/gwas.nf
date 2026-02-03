@@ -171,11 +171,6 @@ process GWASGALLOP {
     getkey = pop_studyarm =~ /(.*)_filtered.pca.tsv/
     pop_studyarm = getkey[0][1]
 
-    def model = ""
-    if (params.model != '') {
-      model = "--model '${params.model}'"
-    }
-
     """
     set -x
     KEY="${pop_studyarm}_${phenoname}"
