@@ -321,66 +321,47 @@ process MERGER_CHUNKS {
 
   script:
     fileTag = mergelist.getSimpleName()
-    if (params.chunk_flag) {
-      """
-      set +x
-      
-      echo "=== MERGER_CHUNKS Debug Info ==="
-      echo "Working directory: \$PWD"
-      echo "Mergelist file: ${mergelist}"
-      echo "Original mergelist contents:"
-      cat ${mergelist}
-      echo ""
-      
-      # Filter mergelist to only include chunks with all three files present
-      > filtered_mergelist.txt
-      while IFS= read -r fname; do
-        if [ -f "\${fname}.psam" ] && [ -f "\${fname}.pgen" ] && [ -f "\${fname}.pvar" ]; then
-          echo "\$fname" >> filtered_mergelist.txt
-        else
-          echo "  ⚠ Skipping \$fname (missing files)" >&2
-        fi
-      done < ${mergelist}
-      
-      echo ""
-      echo "Filtered mergelist (only valid chunks):"
-      cat filtered_mergelist.txt
-      echo ""
-      
-      # Check if we have any valid chunks
-      CHUNK_COUNT=\$(wc -l < filtered_mergelist.txt | tr -d ' ')
-      if [ "\$CHUNK_COUNT" -eq 0 ]; then
-        echo "ERROR: No valid chunks found to merge!" >&2
-        exit 1
+    """
+    set +x
+    
+    echo "=== MERGER_CHUNKS Debug Info ==="
+    echo "Working directory: \$PWD"
+    echo "Mergelist file: ${mergelist}"
+    echo "Original mergelist contents:"
+    cat ${mergelist}
+    echo ""
+    
+    # Filter mergelist to only include chunks with all three files present
+    > filtered_mergelist.txt
+    while IFS= read -r fname; do
+      if [ -f "\${fname}.psam" ] && [ -f "\${fname}.pgen" ] && [ -f "\${fname}.pvar" ]; then
+        echo "\$fname" >> filtered_mergelist.txt
+      else
+        echo "  ⚠ Skipping \$fname (missing files)" >&2
       fi
-      
-      echo "Merging \$CHUNK_COUNT chunks"
-      echo ""
-      
-      plink2 --pmerge-list filtered_mergelist.txt \
-        --make-pgen \
-        --sort-vars \
-        --threads ${task.cpus} \
-        --out ${fileTag}
-      """
-    } else {
-      """
-      set +x
-      
-      echo "=== MERGER_CHUNKS Debug Info (no chunking) ==="
-      echo "Working directory: \$PWD"
-      echo "Looking for: ${fileTag}.1_p1out"
-      echo "Files in current directory:"
-      ls -lh
-      echo ""
-      
-      plink2 --pfile ${fileTag}.1_p1out \
-        --make-pgen \
-        --sort-vars \
-        --threads ${task.cpus} \
-        --out ${fileTag}
-      """
-    }
+    done < ${mergelist}
+    
+    echo ""
+    echo "Filtered mergelist (only valid chunks):"
+    cat filtered_mergelist.txt
+    echo ""
+    
+    # Check if we have any valid chunks
+    CHUNK_COUNT=\$(wc -l < filtered_mergelist.txt | tr -d ' ')
+    if [ "\$CHUNK_COUNT" -eq 0 ]; then
+      echo "ERROR: No valid chunks found to merge!" >&2
+      exit 1
+    fi
+    
+    echo "Merging \$CHUNK_COUNT chunks"
+    echo ""
+    
+    plink2 --pmerge-list filtered_mergelist.txt \
+      --make-pgen \
+      --sort-vars \
+      --threads ${task.cpus} \
+      --out ${fileTag}
+    """
 }
 
 process MERGER_CHRS {
