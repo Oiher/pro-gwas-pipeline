@@ -144,3 +144,20 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 temp/
+files/
+example/genotype/example.vcf/
+example/flowchart/
+.nextflow/
+work/
+Docker
+*.env
+params_*.yml
+References/
+unnamed_project/
+test_*/docker/build-artifacts/
+report-*.html 
+timeline-*.html 
+trace-*.txt
+.nextflow.log*
+test*
+project*/

@@ -1,0 +1,225 @@
+# Dockerfile for long-GWAS pipeline - Ubuntu 22.04
+# Simplified modern version with Python 3.10 and R 4.x
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH=/usr/local/bin:$PATH
+ENV PYTHONPATH=/usr/local/bin
+
+# Install all system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates netbase wget curl unzip git \
+    build-essential cmake gcc g++ make autoconf automake libtool \
+    python3.10 python3-pip python3.10-dev \
+    r-base r-base-dev \
+    libc6-dev zlib1g-dev libbz2-dev libgsl-dev \
+    libperl-dev liblzma-dev libcurl4-openssl-dev \
+    libssl-dev libncurses5-dev tabix \
+    software-properties-common dirmngr gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Note: Python 3.10 will be installed via micromamba below
+# No system Python setup needed here
+
+# Install R packages from CRAN (latest stable versions)
+# Note: R 4.1.2 typically gets survival ~3.8.x, optparse ~1.7.x
+# MOVED EARLY: R packages are slow to install but stable (rarely change)
+RUN Rscript -e 'install.packages(c("survival", "optparse"), repos="https://cloud.r-project.org")'
+
+# ============================================
+# Google Cloud SDK - SLOW but STABLE
+# Install early to maximize cache efficiency
+# ============================================
+
+# Add Google Cloud SDK GPG key (modern approach for Ubuntu 22.04)
+RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+        | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+
+# Add Google Cloud SDK repository
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" \
+        | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+
+# Install Google Cloud SDK
+RUN apt-get update && apt-get install -y google-cloud-cli && \
+    rm -rf /var/lib/apt/lists/*
+
+# ============================================
+# Install Micromamba for bioconda packages
+# Includes Python 3.10 and bioinformatics tools
+# ============================================
+
+ENV MAMBA_ROOT_PREFIX=/opt/micromamba
+ENV PATH=${MAMBA_ROOT_PREFIX}/bin:${PATH}
+
+# Install micromamba (extract to a temp dir so we don't touch /bin)
+RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
+      | tar -xvj -C /tmp bin/micromamba && \
+    mv /tmp/bin/micromamba /usr/local/bin/micromamba && \
+    rm -rf /tmp/bin
+
+# ============================================
+# Install Python 3.10 and bioinformatics tools via bioconda
+# PLINK, bedtools (PLINK2 installed separately below)
+# Note: GCTA removed - not used in pipeline
+# ============================================
+
+# Create the base env directly at ${MAMBA_ROOT_PREFIX} (no -r flag needed)
+RUN /usr/local/bin/micromamba create -y -p ${MAMBA_ROOT_PREFIX} \
+    -c conda-forge -c bioconda \
+    python=3.10 \
+    plink=1.90b6.21 \
+    bedtools=2.31.0 && \
+    /usr/local/bin/micromamba clean -a -y
+
+# ============================================
+# PLINK2 - Download latest version from homepage
+# Using plink2_linux_x86_64_20251205 for --update-chr support
+# ============================================
+
+RUN wget -q https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20251205.zip -O /tmp/plink2.zip && \
+    cd /tmp && \
+    unzip -q plink2.zip && \
+    mv plink2 /usr/local/bin/plink2 && \
+    chmod +x /usr/local/bin/plink2 && \
+    rm -f /tmp/plink2.zip /tmp/vcf_subset /tmp/intel-simplified-software-license.txt
+
+# ============================================
+# HTSlib, SAMtools, BCFtools from stable sources
+# Download and compile from official releases
+# ============================================
+
+# Versions to install
+ENV HTSLIB_VERSION=1.20
+ENV SAMTOOLS_VERSION=1.20
+ENV BCFTOOLS_VERSION=1.20
+
+# Download HTSlib from stable GitHub release
+RUN wget -q https://github.com/samtools/htslib/releases/download/${HTSLIB_VERSION}/htslib-${HTSLIB_VERSION}.tar.bz2 -O /tmp/htslib.tar.bz2 && \
+    cd /tmp && tar xjf htslib.tar.bz2 && \
+    cd htslib-${HTSLIB_VERSION} && \
+    autoreconf -i && \
+    ./configure && \
+    make && make install && \
+    ldconfig && \
+    rm -rf /tmp/htslib*
+
+# Download SAMtools from stable GitHub release
+RUN wget -q https://github.com/samtools/samtools/releases/download/${SAMTOOLS_VERSION}/samtools-${SAMTOOLS_VERSION}.tar.bz2 -O /tmp/samtools.tar.bz2 && \
+    cd /tmp && tar xjf samtools.tar.bz2 && \
+    cd samtools-${SAMTOOLS_VERSION} && \
+    autoheader && autoconf && \
+    ./configure --with-htslib=system && \
+    make && make install && \
+    rm -rf /tmp/samtools*
+
+# Download BCFtools from stable GitHub release
+RUN wget -q https://github.com/samtools/bcftools/releases/download/${BCFTOOLS_VERSION}/bcftools-${BCFTOOLS_VERSION}.tar.bz2 -O /tmp/bcftools.tar.bz2 && \
+    cd /tmp && tar xjf bcftools.tar.bz2 && \
+    rm bcftools.tar.bz2
+
+# Download liftover plugin from freeseek/score repository
+RUN wget -q https://raw.githubusercontent.com/freeseek/score/a9ffa435913101439974fce7c4812235b61e6df5/liftover.c \
+    -O /tmp/bcftools-${BCFTOOLS_VERSION}/plugins/liftover.c
+
+# Compile and install BCFtools with liftover plugin
+RUN cd /tmp/bcftools-${BCFTOOLS_VERSION} && \
+    ./configure --enable-libgsl --enable-perl-filters --with-htslib=system && \
+    make && make install && \
+    rm -rf /tmp/bcftools-${BCFTOOLS_VERSION}
+
+# ============================================
+# METAL - compile from source
+# ============================================
+
+ENV METAL_VERSION=2020-05-05
+
+# Download METAL from stable source (pre-compiled binary)
+RUN wget -q http://csg.sph.umich.edu/abecasis/Metal/download/Linux-metal.tar.gz -O /tmp/metal.tar.gz && \
+    tar xzf /tmp/metal.tar.gz -C /tmp && \
+    rm /tmp/metal.tar.gz
+
+# Install METAL binary
+RUN find /tmp -name "metal" -type f -executable -exec cp {} /usr/local/bin/metal \; && \
+    chmod +x /usr/local/bin/metal && \
+    rm -rf /tmp/generic-metal
+
+# ============================================
+# UCSC liftOver - for coordinate conversions
+# ============================================
+
+RUN wget -q http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/liftOver -O /usr/local/bin/liftOver && \
+    chmod +x /usr/local/bin/liftOver
+
+# ============================================
+# Ancestry reference panel
+# ============================================
+
+# Copy and extract ancestry reference panel
+COPY docker/ancestry_ref_panel.tar.gz /root/
+RUN mkdir -p /srv/GWAS-Pipeline/References/ref_panel && \
+    tar -xzf /root/ancestry_ref_panel.tar.gz -C /srv/GWAS-Pipeline/References/ref_panel --no-same-owner && \
+    rm /root/ancestry_ref_panel.tar.gz
+
+# ============================================
+# Reference genome files - MOVED TO EXTERNAL
+# Reference genomes are now downloaded on-demand by bin/download_references.sh
+# This reduces Docker image size by ~3-4 GB
+# ============================================
+
+# Create reference directories (will be mounted from host or populated on first run)
+RUN mkdir -p /srv/GWAS-Pipeline/References/Genome && \
+    mkdir -p /srv/GWAS-Pipeline/References/liftOver
+
+# ============================================
+# Python packages - Ordered by: SLOW/STABLE first, FAST/DEBUG-PRONE last
+# This maximizes Docker layer cache efficiency during development
+# ============================================
+
+# Upgrade pip first (using micromamba's Python via micromamba run)
+RUN micromamba run -n base pip install --no-cache-dir --upgrade pip
+
+# Install numpy 1.26.0 first (required by pandas 2.x)
+# Note: Upgrading from 1.24.3 to 1.26.0 to fix pandas 2.x compatibility
+RUN micromamba run -n base pip install --no-cache-dir 'numpy==1.26.0'
+
+# Install scipy with numpy 1.26.0 (rebuild for binary compatibility)
+RUN micromamba run -n base pip install --no-cache-dir 'scipy==1.10.1'
+
+# Note: GenoTools removed - not used in pipeline scripts
+
+# Install GALLOP dependencies (statsmodels for LME)
+RUN micromamba run -n base pip install statsmodels==0.13.5
+
+# Install qmplot and plotly for visualization (pinned versions)
+# Constrain pandas to 2.1.x range (2.3.3 has read_csv bugs with numpy arrays)
+# User's local environment: pandas=2.1.4, numpy=1.26.3 works fine
+RUN micromamba run -n base pip install 'pandas>=2.1.0,<2.2.0' qmplot==0.3.3 plotly==5.23.0 kaleido==0.2.1
+
+# Final numpy/scipy reinstall to ensure compatibility after all pip installs
+# Using numpy 1.26.0 for pandas 2.x compatibility
+# KEEP THIS LAST: Quick rebuild (3s) for debugging dependency issues
+RUN micromamba run -n base pip install --force-reinstall --no-cache-dir --no-deps 'numpy==1.26.0' 'scipy==1.10.1'
+
+# Install PyTables for HDF5 support (required by addi_qc_pipeline.py)
+# Installed last as a separate layer for easy cache reuse
+RUN micromamba run -n base pip install --no-cache-dir tables
+
+# ============================================
+# GALLOP Python dependencies - Added at end for easy debugging
+# Required for bin/gallop.py longitudinal mixed model analysis
+# ============================================
+RUN micromamba run -n base pip install --no-cache-dir \
+    scikit-learn==1.3.2
+
+# NOTE: bin/ scripts are NOT copied into the Docker image
+# Nextflow automatically mounts the local bin/ directory to /workspace/bin/ inside containers
+# This allows you to modify scripts without rebuilding the Docker image
+# The scripts are mounted at runtime when using any Nextflow profile (standard or localtest)
+
+WORKDIR /workspace
+
+# Verify all tools
+RUN python3 --version && R --version && plink2 --version && \
+    bcftools --version && gsutil version && liftOver 2>&1 | head -1 && \
+    Rscript -e "library(survival); library(optparse); cat('✅ All installed!\n')"
