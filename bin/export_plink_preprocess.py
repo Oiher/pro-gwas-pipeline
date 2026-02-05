@@ -47,6 +47,12 @@ def main():
         d_pheno = pd.read_csv(args.phenofile, sep="\t", engine='c')
         d_sample = pd.read_csv(args.samplelist, sep="\t", engine='c')
 
+        # Normalize IID column name
+        if '#IID' in d_pheno.columns and 'IID' not in d_pheno.columns:
+            d_pheno.rename(columns={'#IID': 'IID'}, inplace=True)
+        if '#IID' in d_sample.columns and 'IID' not in d_sample.columns:
+            d_sample.rename(columns={'#IID': 'IID'}, inplace=True)
+
         d_result = pd.merge(d_pheno, d_sample, on='IID', how='inner')
         if d_result.shape[0] == 0:
             print("WARNING: No samples found after merging phenotype and sample files")
@@ -59,7 +65,7 @@ def main():
             sys.exit(0)
         
         # Only include covariates explicitly specified by user
-        d_set = d_result.loc[:, ["#FID", "IID"] + all_phenos + covar_num].copy()
+        d_set = d_result.loc[:, ["IID"] + all_phenos + covar_num].copy()
         print(f"Including numeric covariates: {covar_num}")
         
         # One-hot encode categorical covariates
@@ -116,7 +122,7 @@ def main():
                     print(f"Phenotype '{pheno_col}' already in PLINK format 1/2/-9")
         
         # Extract all covariate column names (numeric + categorical dummies)
-        all_covar_cols = [col for col in d_set.columns if col not in ["#FID", "IID"] + all_phenos]
+        all_covar_cols = [col for col in d_set.columns if col not in ["IID"] + all_phenos]
         
         # Reorder covariates if interaction term is specified
         if interact_covar:

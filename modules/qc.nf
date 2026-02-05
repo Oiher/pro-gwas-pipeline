@@ -97,10 +97,11 @@ process SPLIT_VCF {
     tuple val(fileTag), path(vcf), path("${fileTag}.chunk_*.vcf.gz"), emit: vcf_chunks
   
   script:
-  def split_chunk_size = params.chunk_size * 1
+  def split_chunk_size = params.chunk_size * 1 // Adjust chunk size for splitting
   """
   echo "=== SPLIT_VCF ==="
   echo "Original VCF: ${vcf}"
+  echo "Chunk size: ${split_chunk_size} variants per chunk"
   echo ""
   
   echo "Extracting header..."
@@ -197,6 +198,13 @@ process GENETICQC {
     echo -e "${fileTag}\t${chunkId}\t${fChunk}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\tOOM_ERROR\t\${VARIANT_COUNT}" > ${chunkId}.status.txt
     exit \${EXIT_CODE}
   elif [ -f "${chunkId}.pgen" ] && [ -f "${chunkId}.pvar" ] && [ -f "${chunkId}.psam" ]; then
+    # Standardize to IID-only psam; fail fast if IID is not unique
+    if ! normalize_psam_iid_only.sh "${chunkId}.psam"; then
+      EXIT_CODE=\$?
+      echo "ERROR: IID-only standardization failed for ${chunkId}.psam" >&2
+      echo -e "${fileTag}\t${chunkId}\t${fChunk}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\tFAILED\t0" > ${chunkId}.status.txt
+      exit \${EXIT_CODE}
+    fi
     VARIANT_COUNT=\$(grep -vc "^#" ${chunkId}.pvar || echo 0)
     STATUS="SUCCESS"
     echo "✓ Successfully processed chunk with \${VARIANT_COUNT} variants"
@@ -285,6 +293,14 @@ process GENETICQCPLINK {
   mv ${outputPrefix}_p1out.pvar ${fileTag}.pvar
   mv ${outputPrefix}_p1out.psam ${fileTag}.psam
   mv ${outputPrefix}_p1out.log ${fileTag}.log 2>/dev/null || touch ${fileTag}.log
+
+  # Standardize to IID-only psam; fail fast if IID is not unique
+  if ! normalize_psam_iid_only.sh "${fileTag}.psam"; then
+    EXIT_CODE=\$?
+    echo "ERROR: IID-only standardization failed for ${fileTag}.psam" >&2
+    echo -e "${fileTag}\t${fileTag}\t${chr_pfiles}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\tFAILED\t0" > ${fileTag}.status.txt
+    exit \${EXIT_CODE}
+  fi
   
   VARIANT_COUNT=\$(wc -l < ${fileTag}.pvar | awk '{print \$1-1}')
   echo "✓ Successfully processed PLINK file with \${VARIANT_COUNT} variants"
