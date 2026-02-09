@@ -39,21 +39,7 @@ process GWASGLM {
     echo "Processing phenotypes: ${pheno_list}"
 
     # Build IID keep list from phenotype/covariate table.
-    awk -F'\\t' -v OFS='\\t' '
-      NR==1 {
-        for (i=1; i<=NF; i++) {
-          if ($i=="IID" || $i=="#IID") iid_col=i
-        }
-        if (!iid_col) {
-          print "ERROR: IID column not found in sample file: ${samplelist}" > "/dev/stderr"
-          exit 1
-        }
-        next
-      }
-      $iid_col != "" {
-        print "0", $iid_col
-      }
-    ' "${samplelist}" > "${outfile}.keep.iid.tsv"
+    make_keep_iid.py --input "${samplelist}" --output "${outfile}.keep.iid.tsv"
     
     # Note: ${samplelist} contains all samples with standardized covariates from EXPORT_PLINK
     # plink2 --glm automatically excludes samples with missing phenotype values per phenotype
