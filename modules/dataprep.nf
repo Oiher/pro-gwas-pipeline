@@ -50,6 +50,25 @@ process COMPUTE_PCA {
     study_arm_prefix = "${study_arm}"
     
     """
+    set -euo pipefail
+
+    # Convert samplelist to IID-based keep file compatible with IID-only pfile psam.
+    awk -F'\t' -v OFS='\t' '
+      NR==1 {
+        for (i=1; i<=NF; i++) {
+          if ($i=="IID" || $i=="#IID") iid_col=i
+        }
+        if (!iid_col) {
+          print "ERROR: IID column not found in keep file: ${samplelist}" > "/dev/stderr"
+          exit 1
+        }
+        next
+      }
+      $iid_col != "" {
+        print "0", $iid_col
+      }
+    ' ${samplelist} > ${study_arm}.keep.iid.tsv
+
     plink2 \
           --indep-pairwise 50 .2 \
           --maf ${params.minor_allele_freq} \
@@ -57,7 +76,7 @@ process COMPUTE_PCA {
           --out ${study_arm}.ld
 
     plink2 \
-          --keep ${samplelist} \
+          --keep ${study_arm}.keep.iid.tsv \
           --out ${study_arm}.pca \
           --extract ${study_arm}.ld.prune.in \
           --pca 10 \
@@ -126,18 +145,33 @@ process RAWFILE_EXPORT {
 
     """
     set -euo pipefail
+
+    # Build IID keep list from sample table.
+    awk -F'\\t' -v OFS='\\t' '
+      NR==1 {
+        for (i=1; i<=NF; i++) {
+          if ($i=="IID" || $i=="#IID") iid_col=i
+        }
+        if (!iid_col) {
+          print "ERROR: IID column not found in keep file: ${samplelist}" > "/dev/stderr"
+          exit 1
+        }
+        next
+      }
+      $iid_col != "" {
+        print "0", $iid_col
+      }
+    ' ${samplelist} > ${filtered_prefix}.keep.iid.tsv
     
     # Step 1: Apply all filters once to create filtered plink file
     echo "Filtering ${fileTag} with MAF, HWE, and sample filters..."
     
     plink2 \
         --pfile ${fileTag} \
-        --keep ${samplelist} \
+        --keep ${filtered_prefix}.keep.iid.tsv \
         --mac ${params.minor_allele_ct} \
+        --maf ${params.minor_allele_freq} \
         --hwe 1e-6 \
-        --update-sex ${samplelist} \
-        --pheno ${samplelist} \
-        --pheno-col-nums 4 \
         --make-pgen \
         --threads ${task.cpus} \
         --memory ${task.memory.toMega()} \

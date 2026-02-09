@@ -9,6 +9,21 @@ import sys
 import time
 import re
 
+def normalize_to_iid_only(df):
+    """
+    Normalize table to IID-based format by removing FID/#FID and ensuring IID column name.
+    """
+    out = df.copy(deep=True)
+
+    if '#IID' in out.columns and 'IID' not in out.columns:
+        out.rename(columns={'#IID': 'IID'}, inplace=True)
+
+    if 'IID' not in out.columns:
+        raise ValueError("IID column is required in covariates file.")
+
+    out.drop(columns=[c for c in ['#FID', 'FID'] if c in out.columns], inplace=True)
+    return out
+
 def validate_column_names(df):
     """
     Validate column names for problematic characters.
@@ -84,8 +99,14 @@ def main():
         first_line = f.readline()
         delimiter = '\t' if '\t' in first_line else ','
     
-    # Read FID as string to prevent numeric conversion (0 -> 0.0)
-    data_df = pd.read_csv(covariates_file, sep=delimiter, engine='c', dtype={'#FID': str, 'FID': str})
+    # Read IDs as strings and normalize to IID-only format for downstream PLINK2 compatibility.
+    data_df = pd.read_csv(
+        covariates_file,
+        sep=delimiter,
+        engine='c',
+        dtype={'#FID': str, 'FID': str, '#IID': str, 'IID': str}
+    )
+    data_df = normalize_to_iid_only(data_df)
     
     # Validate column names
     validation_error = validate_column_names(data_df)
