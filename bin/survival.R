@@ -94,9 +94,14 @@ if (!('tstart' %in% colnames(data.merged)) && !('tend' %in% colnames(data.merged
 if (length(input.categorical) > 0) {
   for (cat_cov in input.categorical) {
     if (cat_cov %in% colnames(data.merged)) {
-      data.merged[[cat_cov]] <- as.factor(data.merged[[cat_cov]])
-      print(paste("Converted", cat_cov, "to factor with", 
-                  length(levels(data.merged[[cat_cov]])), "levels"))
+      vals <- data.merged[[cat_cov]]
+      freq_tab <- sort(table(vals), decreasing=TRUE)
+      level_order <- names(freq_tab)
+      data.merged[[cat_cov]] <- factor(vals, levels=level_order)
+      ref_level <- if (length(level_order) > 0) level_order[1] else "NA"
+      print(paste("Converted", cat_cov, "to factor with",
+                  length(levels(data.merged[[cat_cov]])), "levels;",
+                  "reference =", ref_level))
     } else {
       warning(paste("Categorical covariate", cat_cov, "not found in merged data"))
     }

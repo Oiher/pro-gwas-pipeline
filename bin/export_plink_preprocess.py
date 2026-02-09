@@ -73,11 +73,24 @@ def main():
         if covar_cat:
             for cat_col in covar_cat:
                 if cat_col in d_result.columns:
-                    # Create dummy variables (drop first category to avoid multicollinearity)
-                    dummies = pd.get_dummies(d_result[cat_col], prefix=cat_col, drop_first=True, dtype=int)
+                    # Use most frequent level as reference to stabilize design matrix.
+                    cat_series = d_result[cat_col].astype('string')
+                    level_counts = cat_series.dropna().value_counts()
+                    if level_counts.empty:
+                        print(f"Skipping '{cat_col}' (no non-missing values)")
+                        continue
+                    ref_level = level_counts.idxmax()
+                    other_levels = sorted([x for x in level_counts.index.tolist() if x != ref_level])
+                    ordered_levels = [ref_level] + other_levels
+                    cat_series = pd.Categorical(cat_series, categories=ordered_levels, ordered=True)
+
+                    # Create dummy variables and drop the explicit reference level.
+                    dummies = pd.get_dummies(cat_series, prefix=cat_col, drop_first=True, dtype=int)
                     d_set = pd.concat([d_set, dummies], axis=1)
                     categorical_dummies.extend(list(dummies.columns))
-                    print(f"One-hot encoded '{cat_col}': {list(dummies.columns)}")
+                    print(
+                        f"One-hot encoded '{cat_col}' with reference='{ref_level}': {list(dummies.columns)}"
+                    )
         
         # Standardize numeric covariates (except interaction covariate and categorical dummies)
         print("\n--- Standardizing numeric covariates ---")

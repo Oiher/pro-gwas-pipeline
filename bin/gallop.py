@@ -174,7 +174,24 @@ def preprocess(dp, dc, ds, covar_numeric=None, covar_categorical=None,
   # One-hot encode categorical covariates
   if cat_covariates:
     sys.stdout.write(f"One-hot encoding categorical covariates: {', '.join(cat_covariates)}\n")
-    df_encoded = pd.get_dummies(df[cat_covariates], drop_first=True, dtype=float)
+    encoded_parts = []
+    for cat_cov in cat_covariates:
+      cat_series = df[cat_cov].astype('string')
+      level_counts = cat_series.dropna().value_counts()
+      if level_counts.empty:
+        sys.stdout.write(f"Skipping categorical covariate '{cat_cov}' (no non-missing values)\n")
+        continue
+      ref_level = level_counts.idxmax()
+      other_levels = sorted([x for x in level_counts.index.tolist() if x != ref_level])
+      ordered_levels = [ref_level] + other_levels
+      cat_series = pd.Categorical(cat_series, categories=ordered_levels, ordered=True)
+      encoded = pd.get_dummies(cat_series, prefix=cat_cov, drop_first=True, dtype=float)
+      encoded_parts.append(encoded)
+      sys.stdout.write(f"  {cat_cov}: reference='{ref_level}' ({level_counts[ref_level]} samples)\n")
+    if encoded_parts:
+      df_encoded = pd.concat(encoded_parts, axis=1)
+    else:
+      df_encoded = pd.DataFrame(index=df.index)
     # Update covariates list to include encoded columns
     encoded_cols = df_encoded.columns.tolist()
     sys.stdout.write(f"Created {len(encoded_cols)} dummy variables: {', '.join(encoded_cols)}\n")

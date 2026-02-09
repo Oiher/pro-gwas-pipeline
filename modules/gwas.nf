@@ -171,7 +171,7 @@ process GWASGALLOP {
 
     def getkey = []
     def pop_studyarm = samplelist.getName()
-    getkey = pop_studyarm =~ /(.*)_filtered.pca.tsv/
+    getkey = pop_studyarm =~ /(.*)_filtered\\.pca(?:\\.harmonized)?\\.tsv/
     pop_studyarm = getkey[0][1]
 
     """
@@ -210,7 +210,7 @@ process GWASCPH {
 
     def getkey = []
     def pop_studyarm = samplelist.getName()
-    getkey = pop_studyarm =~ /(.*)_filtered.pca.tsv/
+    getkey = pop_studyarm =~ /(.*)_filtered\\.pca(?:\\.harmonized)?\\.tsv/
     pop_studyarm = getkey[0][1]
 
     """

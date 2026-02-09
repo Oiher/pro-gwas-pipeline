@@ -4,6 +4,7 @@
  * - MAKEANALYSISSETS: Extract study arms and filter samples (outliers, kinship)
  * - COMPUTE_PCA: Compute principal components for each study arm
  * - MERGE_PCA: Merge PCA results with sample data
+ * - HARMONIZE_CATEGORICAL_COVARS: Collapse rare categorical levels for model stability
  * - GALLOPCOX_INPUT: Prepare input chunks for GALLOP/CPH analysis
  * - RAWFILE_EXPORT: Export raw files for longitudinal/survival analysis
  * - EXPORT_PLINK: Export PLINK format for GLM analysis
@@ -106,6 +107,36 @@ process MERGE_PCA {
      """
 }
 
+process HARMONIZE_CATEGORICAL_COVARS {
+  scratch true
+  label 'small'
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true, pattern: "*_filtered.pca.harmonized.tsv"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*.cat_mapping.tsv"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*.cat_summary.tsv"
+
+  input:
+    each path(samplelist)
+
+  output:
+    path "${params.ancestry}_*_filtered.pca.harmonized.tsv"
+
+  script:
+    def m = []
+    def study_arm = ""
+    study_arm = samplelist.getName()
+    m = study_arm =~ /(.*)_filtered.pca.tsv/
+    study_arm = m[0][1]
+    def outname = "${study_arm}_filtered.pca.harmonized.tsv"
+
+    """
+    harmonize_categorical_covars.py \
+        --input ${samplelist} \
+        --output ${outname} \
+        --categorical "${params.covar_categorical}" \
+        --min-count ${params.covar_cat_min_count}
+    """
+}
+
 process RAWFILE_EXPORT {
   scratch true
   label 'small'
@@ -125,7 +156,7 @@ process RAWFILE_EXPORT {
   script:
     def study_arm = ""
     study_arm = samplelist.getName()
-    m = study_arm =~ /(.*)_filtered.pca.tsv/
+    m = study_arm =~ /(.*)_filtered.pca.harmonized.tsv/
     study_arm = m[0][1]
     def filtered_prefix = "${study_arm}_${fileTag}_filtered"
 
@@ -211,7 +242,7 @@ process EXPORT_PLINK {
     def m = []
     def study_arm = ""
     study_arm = samplelist.getName()
-    m = study_arm =~ /(.*)_filtered.pca.tsv/
+    m = study_arm =~ /(.*)_filtered.pca.harmonized.tsv/
     outfile = "${m[0][1]}"
 
     def pheno_name = "y"

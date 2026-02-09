@@ -47,7 +47,7 @@ params.datetime = new java.text.SimpleDateFormat("YYYY-MM-dd'T'HHMMSS").format(d
  * Import consolidated modules
  */
 include { CHECK_REFERENCES; SPLIT_VCF; GENETICQC; GENETICQCPLINK; MERGER_CHUNKS; LD_PRUNE_CHR; MERGER_CHRS; SIMPLE_QC; GWASQC } from './modules/qc.nf'
-include { MAKEANALYSISSETS; COMPUTE_PCA; MERGE_PCA; RAWFILE_EXPORT; EXPORT_PLINK } from './modules/dataprep.nf'
+include { MAKEANALYSISSETS; COMPUTE_PCA; MERGE_PCA; HARMONIZE_CATEGORICAL_COVARS; RAWFILE_EXPORT; EXPORT_PLINK } from './modules/dataprep.nf'
 include { GWASGLM; GWASGALLOP; GWASCPH } from './modules/gwas.nf'
 include { SAVEGWAS; MANHATTAN } from './modules/results.nf'
 
@@ -270,12 +270,13 @@ workflow {
     MAKEANALYSISSETS(qc_h5_file, params.covarfile)
     COMPUTE_PCA(MAKEANALYSISSETS.out.study_arm_files.flatten(), input_compute_pca)
     MERGE_PCA(COMPUTE_PCA.out.eigenvec)
+    HARMONIZE_CATEGORICAL_COVARS(MERGE_PCA.out.flatten())
 
     // Branch based on analysis type
     if (params.longitudinal_flag | params.survival_flag) {
         // For longitudinal/survival: chunk variants and export to raw format
         // RAWFILE_EXPORT now handles both chunking and export internally
-        RAWFILE_EXPORT(gallop_plink_input, MERGE_PCA.out)
+        RAWFILE_EXPORT(gallop_plink_input, HARMONIZE_CATEGORICAL_COVARS.out)
         
         // Flatten to process each raw file individually
         RAWFILE_EXPORT.out.gwas_rawfile
@@ -286,7 +287,7 @@ workflow {
 
     } else {
         // For cross-sectional: use PLINK binary directly (no chunking, no raw export)
-        EXPORT_PLINK(MERGE_PCA.out.flatten(), params.phenofile)
+        EXPORT_PLINK(HARMONIZE_CATEGORICAL_COVARS.out.flatten(), params.phenofile)
         
         // Collect outputs from EXPORT_PLINK: pheno.tsv, covar_names.txt, n_covar.txt
         // Log files (output[3]) are published automatically via publishDir
