@@ -46,7 +46,7 @@ process COMPUTE_PCA {
     def m = []
     def study_arm = ""
     study_arm = samplelist.getName()
-    m = study_arm =~ /(.*)_filtered.tsv/
+    m = study_arm =~ /(.+)_filtered\.tsv$/
     study_arm = m[0][1]
     study_arm_prefix = "${study_arm}"
     
@@ -124,7 +124,7 @@ process HARMONIZE_CATEGORICAL_COVARS {
     def m = []
     def study_arm = ""
     study_arm = samplelist.getName()
-    m = study_arm =~ /(.*)_filtered.pca.tsv/
+    m = study_arm =~ /(.+)_filtered\.pca\.tsv$/
     study_arm = m[0][1]
     def outname = "${study_arm}_filtered.pca.harmonized.tsv"
 
@@ -156,7 +156,7 @@ process RAWFILE_EXPORT {
   script:
     def study_arm = ""
     study_arm = samplelist.getName()
-    m = study_arm =~ /(.*)_filtered.pca.harmonized.tsv/
+    m = study_arm =~ /(.+)_filtered\.pca\.harmonized\.tsv$/
     study_arm = m[0][1]
     def filtered_prefix = "${study_arm}_${fileTag}_filtered"
 
@@ -242,7 +242,7 @@ process EXPORT_PLINK {
     def m = []
     def study_arm = ""
     study_arm = samplelist.getName()
-    m = study_arm =~ /(.*)_filtered.pca.harmonized.tsv/
+    m = study_arm =~ /(.+)_filtered\.pca\.harmonized\.tsv$/
     outfile = "${m[0][1]}"
 
     def pheno_name = "y"

@@ -166,12 +166,12 @@ process GWASGALLOP {
   script:
     def m = []
     def outfile = rawfile.getName()
-    m = outfile =~ /(.*).raw/
+    m = outfile =~ /(.+)\.raw$/
     outfile = "${m[0][1]}"
 
     def getkey = []
     def pop_studyarm = samplelist.getName()
-    getkey = pop_studyarm =~ /(.*)_filtered\\.pca(?:\\.harmonized)?\\.tsv/
+    getkey = pop_studyarm =~ /(.+)_filtered\.pca(?:\.harmonized)?\.tsv$/
     pop_studyarm = getkey[0][1]
 
     """
@@ -205,12 +205,12 @@ process GWASCPH {
   script:
     def m = []
     def outfile = rawfile.getName()
-    m = outfile =~ /(.*).raw/
+    m = outfile =~ /(.+)\.raw$/
     outfile = "${m[0][1]}.coxph"
 
     def getkey = []
     def pop_studyarm = samplelist.getName()
-    getkey = pop_studyarm =~ /(.*)_filtered\\.pca(?:\\.harmonized)?\\.tsv/
+    getkey = pop_studyarm =~ /(.+)_filtered\.pca(?:\.harmonized)?\.tsv$/
     pop_studyarm = getkey[0][1]
 
     """
