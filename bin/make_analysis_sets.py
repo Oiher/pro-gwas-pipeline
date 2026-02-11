@@ -126,7 +126,15 @@ def main():
     print('=' * 80)
     
     initial_count = len(data_df)
-    print(f'Initial sample count: {initial_count}')
+    # error if covariates files has non-unique IIDs
+    if data_df.IID.duplicated().any():
+        dup_iids = data_df.IID[data_df.IID.duplicated()].unique()
+        error_msg = f"ERROR: Covariates file contains non-unique IIDs:\n"
+        for iid in dup_iids:
+            error_msg += f"  - {iid}\n"
+        print(error_msg, file=sys.stderr)
+        sys.exit(1)
+    print(f'Initial participants count in {covariates_file}: {initial_count}')
     
     # Step 1: Filter by ancestry
     analytical_set = data_df[data_df.IID.isin(ancestry_df.IID)].copy(deep=True)

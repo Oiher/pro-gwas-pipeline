@@ -216,7 +216,8 @@ $STORE_ROOT/
 ## Running the Pipeline
 
 **Note**: 
-* PLINK files can be an input if they are chromosome separated. But VCF input is preferred as the VCF workflow has multi-alellic splitting, ref/alt-aware liftover, imputation quality filtering and more parallelization.
+* PLINK files can be an input if they are chromosome separated. But VCF input is preferred as the VCF workflow has multi-alellic splitting, ref/alt-aware liftover, imputation quality filtering and more parallelization. 
+* The plink file naming convention should be not using dots before pgen/pvar/psam extensions to avoid confusion with chromosome names. For example, `chr20_dose.pgen` instead of `chr20.dose.pgen`.
 
 ### Set Environment Variables
 ```
@@ -344,6 +345,8 @@ input: "genotype/chr{17,18,19}.vcf"
 # → chr17-19 newly processed
 # → Analysis includes ALL 6 chromosomes (chr21-22 + chr17-19)
 ```
+
+**TIPS: Even if you use the different `analysis_name` or change phenotypes, the chromosome-level QC is reused as long as the `PROJECT_NAME` and the genetic parameters are the same.**
 
 #### 3. publishDir + cache 'deep' (merged QC results)
 Merged/aggregated results reuse based on **content**, not paths:
