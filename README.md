@@ -375,6 +375,39 @@ Merged/aggregated results reuse based on **content**, not paths:
 - Different chromosome sets? Use different `genetic_cache_key` (set via `genetic_data_id` parameter)
 - Same genetics, different phenotypes? Pipeline automatically shares genetic QC via `cache 'deep'`
 
+## Appendix
+Some handy workflows.
+
+
+### METAL Meta-analysis (Standalone)
+
+Use `appendix/metal.nf` when you already have long-gwas-outputs that you want meta-analysis.
+
+Expected input columns (tab-delimited): `ID(chr:pos:ref:alt)`, `REF`, `ALT`, `A1`, `BETA`, `SE`, `P`, `OBS_CT`, `A1_FREQ`
+
+#### Example
+Do meta-analysis for survival results of EUR and AJ populations with google cloud batch.
+
+Create `metal_surv.yml` with the following content, replacing `<YOUR_BUCKET>` with your actual GCS bucket name where the input files are located and where you want the output to be stored.
+```yml
+metal_input: "gs://<YOUR_BUCKET>/EUR_*_SURV_results.tsv.gz,gs://<YOUR_BUCKET>/AJ_*_SURV_results.tsv.gz"
+metal_outdir: "gs://<YOUR_BUCKET>/META/SURV"
+metal_prefix: "HY_SURV_META"
+```
+
+Then run this command to execute the METAL meta-analysis:
+```bash
+nextflow run metal.nf -profile gcb2 -params-file metal_surv.yml
+```
+
+Or run directly:
+```bash
+nextflow run metal.nf -profile gcb2 \
+  --metal_input "gs://bucket/path/EUR_*_SURV_results.tsv.gz,gs://bucket/path/AJ_*_SURV_results.tsv.gz" \
+  --metal_outdir "gs://bucket/path/META/SURV" \
+  --metal_prefix "HY_SURV_META"
+```
+
 ## Troubleshooting
 
 If the pipeline fails, check the following:
