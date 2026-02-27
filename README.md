@@ -385,6 +385,8 @@ Use `appendix/metal.nf` when you already have long-gwas-outputs that you want me
 
 Expected input columns (tab-delimited): `ID(chr:pos:ref:alt)`, `REF`, `ALT`, `A1`, `BETA`, `SE`, `P`, `OBS_CT`, `A1_FREQ`
 
+If the input is from GWASGALLOP, then modify the `appendix/metal.nf` to select the correct columns such as `BETAi`, `SEi`, `Pi` for intercept and `BETAs`, `SEs`, `Ps` for slope effect for the variants.
+
 #### Example
 Do meta-analysis for survival results of EUR and AJ populations with google cloud batch.
 
