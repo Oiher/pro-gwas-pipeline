@@ -32,7 +32,7 @@ process MAKEANALYSISSETS {
 process COMPUTE_PCA {
   scratch true
   label 'large'
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/pca", mode: 'copy', overwrite: true, pattern: "*.eigenvec"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/pca", mode: 'copy', overwrite: true, pattern: "*.{eigenvec,eigenval}"
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*.log"
 
   input:
@@ -41,6 +41,7 @@ process COMPUTE_PCA {
     
   output:
     tuple path(samplelist), path("${study_arm_prefix}.pca.eigenvec"), emit: eigenvec
+    path "${study_arm_prefix}.pca.eigenval"
 
   script:
     def m = []
