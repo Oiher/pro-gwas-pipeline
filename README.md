@@ -379,13 +379,37 @@ Merged/aggregated results reuse based on **content**, not paths:
 Some handy workflows.
 
 
+### Focused Analysis (run_focus.nf)
+
+Use `run_focus.nf` for targeted GWAS on a small set of variants of interest, without re-running the full QC/PCA pipeline. Supports GLM, longitudinal (GALLOP), and survival (CPH) modes.
+
+```bash
+nextflow run run_focus.nf -profile standard -params-file conf/examples/focus_cs.yml
+```
+
+**Genotype input (`focus_plink_input`):** A `.pgen` file (with `.pvar`/`.psam`) containing only the variants of interest. Variant IDs will be standardized to `chr:pos:ref:alt` format internally — no need to pre-format them.
+
+**Covariate input (`focus_covar_file`):** Recommended to reuse the `*_filtered.pca.harmonized.tsv` output from a prior `main.nf` run (already QC'd and PCA-appended). If you provide a raw covariate file instead, it will be renamed to `{ancestry}_focus_filtered.pca.tsv` internally so the pipeline can process it — the filename does not need to contain "pca".
+
+**Strata file (`focus_strata_file`, optional):** A tab-separated file that splits the analysis into independent groups (e.g., by ancestry, cohort, or study arm). Each stratum runs as a separate GWAS job.
+
+```
+#FID    IID     STRATA
+0       ID001   GROUP1
+0       ID002   GROUP1
+0       ID003   GROUP2
+```
+
+If omitted, all samples are analyzed together as a single group.
+
+
 ### METAL Meta-analysis (Standalone)
 
-Use `appendix/metal.nf` when you already have long-gwas-outputs that you want meta-analysis.
+Use `run_metal.nf` when you already have long-gwas-outputs that you want meta-analysis.
 
 Expected input columns (tab-delimited): `ID(chr:pos:ref:alt)`, `REF`, `ALT`, `A1`, `BETA`, `SE`, `P`, `OBS_CT`, `A1_FREQ`
 
-If the input is from GWASGALLOP, then modify the `appendix/metal.nf` to select the correct columns such as `BETAi`, `SEi`, `Pi` for intercept and `BETAs`, `SEs`, `Ps` for slope effect for the variants.
+If the input is from GWASGALLOP, then modify the `run_metal.nf` to select the correct columns such as `BETAi`, `SEi`, `Pi` for intercept and `BETAs`, `SEs`, `Ps` for slope effect for the variants.
 
 #### Example
 Do meta-analysis for survival results of EUR and AJ populations with google cloud batch.

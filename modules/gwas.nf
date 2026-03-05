@@ -11,8 +11,10 @@ process GWASGLM {
   scratch true
   label 'medium'
 
+  publishDir "${params.project_dir}/analyses/${params.genetic_cache_key}/${params.analysis_name}/results", mode: 'copy', overwrite: true
+
   input:
-    tuple val(fileTag), path(plog), path(pgen), path(psam), path(pvar), val(pop_studyarm), path(samplelist), path(covar_names_file), path(n_covar_file)
+    tuple val(fileTag), path(plog, stageAs: 'plink.log'), path(pgen), path(psam), path(pvar), val(pop_studyarm), path(samplelist), path(covar_names_file), path(n_covar_file)
     val phenonames
 
   output:
@@ -155,6 +157,8 @@ process GWASGALLOP {
   scratch true
   label 'medium'
 
+  publishDir "${params.project_dir}/analyses/${params.genetic_cache_key}/${params.analysis_name}/results", mode: 'copy', overwrite: true, enabled: params.publish_gwas_results
+
   input:
     tuple val(fileTag), path(samplelist), path(rawfile)
     path x, stageAs: 'phenotypes.tsv'
@@ -193,6 +197,8 @@ process GWASGALLOP {
 process GWASCPH {
   scratch true
   label 'small'
+
+  publishDir "${params.project_dir}/analyses/${params.genetic_cache_key}/${params.analysis_name}/results", mode: 'copy', overwrite: true, enabled: params.publish_gwas_results
 
   input:
     tuple val(fileTag), path(samplelist), path(rawfile)
