@@ -323,7 +323,8 @@ workflow {
             .set{ PLINK_SAMPLE_LIST }
         
         // For GLM: use gallop_plink_input (already grouped per chromosome)
-        // Unpack PLINK files: convert from [fileTag, [files]] to [fileTag, log, pgen, pvar, psam]
+        // Unpack PLINK files: convert from [fileTag, [files]] to [fileTag, log, pgen, psam, pvar]
+        // Note: groupTuple sorts files alphabetically, so order is: log, pgen, psam, pvar
         // Then combine each chunk with PLINK_SAMPLE_LIST (1 sample list applies to all 22 chromosomes)
         gallop_plink_input
             .map{ fileTag, plinkFiles -> 

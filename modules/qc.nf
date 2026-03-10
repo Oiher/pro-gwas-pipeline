@@ -411,13 +411,13 @@ process LD_PRUNE_CHR {
   label 'small'
 
   input:
-    tuple path(psam), path(pgen), path(pvar), path(log)
+    tuple path(log), path(pgen), path(psam), path(pvar)
   output:
-    tuple path("${output}.psam"), path("${output}.pgen"), path("${output}.pvar")
+    tuple path("*_pruned.psam"), path("*_pruned.pgen"), path("*_pruned.pvar")
 
   script:
     def base = pgen.getBaseName()
-    output = "${base}_pruned"
+    def output = "${base}_pruned"
     """
     set +x
     
