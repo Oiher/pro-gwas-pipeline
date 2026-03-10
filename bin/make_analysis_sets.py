@@ -94,6 +94,21 @@ def main():
     outlier_df = pd.read_hdf(samplelist_file, key="outliers")
     kin_df = pd.read_hdf(samplelist_file, key="kin")
     
+    # Convert IID columns to strings for consistent comparison
+    # HDF5 files may store IIDs as integers, but we need them as strings to match covariates
+    for df in [ancestry_df, outlier_df]:
+        if 'IID' in df.columns:
+            df['IID'] = df['IID'].astype(str)
+        if '#IID' in df.columns:
+            df['#IID'] = df['#IID'].astype(str)
+    
+    # For kinship dataframe, convert both IID columns
+    if not kin_df.empty:
+        if '#IID1' in kin_df.columns:
+            kin_df['#IID1'] = kin_df['#IID1'].astype(str)
+        if 'IID2' in kin_df.columns:
+            kin_df['IID2'] = kin_df['IID2'].astype(str)
+    
     # Auto-detect delimiter (CSV or TSV)
     with open(covariates_file, 'r') as f:
         first_line = f.readline()
