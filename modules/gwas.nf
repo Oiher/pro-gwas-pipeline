@@ -14,7 +14,7 @@ process GWASGLM {
   publishDir "${params.project_dir}/analyses/${params.genetic_cache_key}/${params.analysis_name}/results", mode: 'copy', overwrite: true
 
   input:
-    tuple val(fileTag), path(plog, stageAs: 'plink.log'), path(pgen), path(psam), path(pvar), val(pop_studyarm), path(samplelist), path(covar_names_file), path(n_covar_file)
+    tuple val(fileTag), path(plog), path(pgen), path(psam), path(pvar), val(pop_studyarm), path(samplelist), path(covar_names_file), path(n_covar_file)
     val phenonames
 
   output:
@@ -28,6 +28,8 @@ process GWASGLM {
     // Convert phenonames to space-separated string for plink2
     // Handle both String and List input formats
     def pheno_list = phenonames instanceof List ? phenonames.join(' ') : phenonames.toString().replaceAll(/[\[\]'"]/, '').trim()
+    // Get basename for plink files (without extension)
+    def pfile_base = pgen.getSimpleName()
 
     """
     set -x
@@ -51,7 +53,7 @@ process GWASGLM {
     if [ -n "${params.covar_interact}" ]; then
         # With interaction: test SNP main effect and SNP*covariate interaction
         INTERACTION_IDX=\$((N_COVAR + 2))
-        plink2 --pfile ${fileTag} \
+        plink2 --pfile ${pfile_base} \
                 --glm interaction omit-ref cols=+beta,+a1freq \
                 --pheno "${samplelist}" \
                 --pheno-name ${pheno_list} \
@@ -120,7 +122,7 @@ process GWASGLM {
         
     else
         # Standard analysis without interaction
-        plink2 --pfile ${fileTag} \
+        plink2 --pfile ${pfile_base} \
                 --glm hide-covar omit-ref cols=+beta,+a1freq \
                 --pheno "${samplelist}" \
                 --pheno-name ${pheno_list} \
