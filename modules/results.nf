@@ -41,7 +41,7 @@ process SAVEGWAS {
 
 process MANHATTAN {
   scratch true
-  label 'medium'
+  label 'two_cpu_large_mem'
 
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/gwas_results/${model}/plots", mode: 'copy', overwrite: true
 
