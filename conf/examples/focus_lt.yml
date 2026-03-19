@@ -38,7 +38,7 @@ publish_gwas_results  : true # Need to be true
 # ==================== GWAS OPTIONS ====================
 minor_allele_freq: 0.01
 minor_allele_ct: 10
-chunk_size: 1000  # For RAWFILE_EXPORT (longitudinal/survival only)
+no_chunk_export: true  # Export all variants in one pass; no chunking needed for small focus variant sets
 
 
 # example usage: nextflow run focus_analysis.nf -profile standard -params-file conf/examples/focus_lt.yml

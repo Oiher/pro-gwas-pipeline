@@ -198,7 +198,12 @@ workflow {
             .first()
 
         // Use strata-filtered sample_lists (if stratified), otherwise harmonized_covar
-        def export_samplelist = (params.focus_strata_file) ? sample_lists.map { strata, sl -> sl } : harmonized_covar
+        def export_samplelist
+        if (params.focus_strata_file) {
+            export_samplelist = sample_lists.map { strata, sl -> sl }
+        } else {
+            export_samplelist = harmonized_covar
+        }
         RAWFILE_EXPORT(norm_plink, export_samplelist)
         export_data = RAWFILE_EXPORT.out.gwas_rawfile.transpose()
         

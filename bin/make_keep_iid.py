@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
-Create a PLINK keep file (FID IID) from a TSV table containing IID/#IID.
-Outputs two columns with FID fixed to 0 and IID from input.
+Create a PLINK2 keep file (FID IID) from a TSV table containing IID/#IID.
+Requires --psam to look up the real FID for each IID:
+  - psam with #FID + IID columns: uses the real FID value
+  - psam with #IID only (no FID): uses '0' as FID (plink2 internal default)
+Outputs two-column FID<tab>IID, compatible with all plink2 versions.
 """
 
 import argparse
@@ -9,11 +12,36 @@ import csv
 import sys
 
 
+def load_fid_map(psam_path: str) -> dict:
+    """Return {IID: FID} from a plink2 .psam file."""
+    fid_map = {}
+    with open(psam_path, "r", newline="") as f:
+        reader = csv.reader(f, delimiter="\t")
+        header = next(reader)
+        h0 = header[0].lstrip("#")
+        if h0 == "IID":
+            # No FID column — plink2 treats missing FID as '0'
+            iid_idx, fid_idx = 0, None
+        else:
+            # Standard: col0=#FID, col1=IID
+            fid_idx, iid_idx = 0, 1
+        for row in reader:
+            if not row or row[0].startswith("#"):
+                continue
+            iid = row[iid_idx].strip()
+            fid = row[fid_idx].strip() if fid_idx is not None else "0"
+            fid_map[iid] = fid
+    return fid_map
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build IID-based PLINK keep file")
+    parser = argparse.ArgumentParser(description="Build FID/IID PLINK2 keep file")
     parser.add_argument("--input", required=True, help="Input TSV with IID or #IID column")
-    parser.add_argument("--output", required=True, help="Output keep file path")
+    parser.add_argument("--output", required=True, help="Output keep file path (FID<tab>IID)")
+    parser.add_argument("--psam", required=True, help="plink2 .psam file for FID lookup")
     args = parser.parse_args()
+
+    fid_map = load_fid_map(args.psam)
 
     with open(args.input, "r", newline="") as fin:
         reader = csv.reader(fin, delimiter="\t")
@@ -42,7 +70,8 @@ def main() -> int:
                 iid = row[iid_idx].strip()
                 if not iid:
                     continue
-                writer.writerow(["0", iid])
+                fid = fid_map.get(iid, iid)  # fall back to FID=IID if not found in psam
+                writer.writerow([fid, iid])
                 n_written += 1
 
     if n_written == 0:

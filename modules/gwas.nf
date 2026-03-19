@@ -42,8 +42,8 @@ process GWASGLM {
     echo "Total covariates: \${N_COVAR}"
     echo "Processing phenotypes: ${pheno_list}"
 
-    # Build IID keep list from phenotype/covariate table.
-    make_keep_iid.py --input "${samplelist}" --output "${outfile}.keep.iid.tsv"
+    # Build FID/IID keep list from phenotype/covariate table using FID lookup from psam.
+    make_keep_iid.py --input "${samplelist}" --output "${outfile}.keep.iid.tsv" --psam "${psam}"
     
     # Note: ${samplelist} contains all samples with standardized covariates from EXPORT_PLINK
     # plink2 --glm automatically excludes samples with missing phenotype values per phenotype

@@ -54,8 +54,8 @@ process COMPUTE_PCA {
     """
     set -euo pipefail
 
-    # Convert samplelist to IID-based keep file compatible with IID-only pfile psam.
-    make_keep_iid.py --input ${samplelist} --output ${study_arm}.keep.iid.tsv
+    # Convert samplelist to FID/IID keep file using FID lookup from psam.
+    make_keep_iid.py --input ${samplelist} --output ${study_arm}.keep.iid.tsv --psam allchr_merged.psam
 
     plink2 \
           --indep-pairwise 50 .2 \
@@ -164,9 +164,9 @@ process RAWFILE_EXPORT {
     """
     set -euo pipefail
 
-    # Build IID keep list from sample table.
-    make_keep_iid.py --input ${samplelist} --output ${filtered_prefix}.keep.iid.tsv
-    
+    # Build FID/IID keep list from sample table using FID lookup from psam.
+    make_keep_iid.py --input ${samplelist} --output ${filtered_prefix}.keep.iid.tsv --psam ${fileTag}.psam
+
     # Step 1: Apply all filters once to create filtered plink file
     echo "Filtering ${fileTag} with MAF, HWE, and sample filters..."
     
@@ -181,42 +181,51 @@ process RAWFILE_EXPORT {
         --memory ${task.memory.toMega()} \
         --out ${filtered_prefix}
     
-    # Step 2: Generate chunks from filtered pvar file using awk
-    echo "Generating chunks from filtered variants..."
-    
-    awk -v chunk_size=${params.chunk_size} '
-        BEGIN { count=0; start=""; }
-        !/^#/ {
-            vid = \$3;
-            count++;
-            if (start == "") start = vid;
-            
-            if (count >= chunk_size) {
-                print start "\\t" vid;
-                start = "";
-                count = 0;
-            }
-        }
-        END { if (count > 0) print start "\\t" vid; }
-    ' ${filtered_prefix}.pvar > chunks.txt
-    
-    NUM_CHUNKS=\$(wc -l < chunks.txt)
-    echo "Generated \${NUM_CHUNKS} chunks for ${fileTag} (after filtering)"
-    
-    # Step 3: Export .raw files from filtered plink file
-    while IFS=\$'\\t' read -r from_var to_var; do
-        nameout="${study_arm}_${fileTag}_\${from_var}_\${to_var}"
-        echo "Exporting chunk: \${from_var} to \${to_var}"
-        
+    # Step 2 & 3: Export .raw files — single pass (no_chunk_export=true) or chunked by variant range
+    if [ "${params.no_chunk_export}" = "true" ]; then
+        # Single export: for small variant sets (e.g. focus analysis) no chunking needed
+        echo "Exporting all variants for ${fileTag} in one pass..."
         plink2 \
             --pfile ${filtered_prefix} \
             --export A \
-            --from \${from_var} \
-            --to \${to_var} \
-            --out \${nameout} \
+            --out "${study_arm}_${fileTag}" \
             --threads ${task.cpus} \
             --memory ${task.memory.toMega()}
-    done < chunks.txt
+    else
+        # Chunked export by variant range: efficient for large single-chromosome plink files
+        echo "Generating chunks from filtered variants..."
+        awk -v chunk_size=${params.chunk_size} '
+            BEGIN { count=0; start=""; }
+            !/^#/ {
+                vid = \$3;
+                count++;
+                if (start == "") start = vid;
+
+                if (count >= chunk_size) {
+                    print start "\\t" vid;
+                    start = "";
+                    count = 0;
+                }
+            }
+            END { if (count > 0) print start "\\t" vid; }
+        ' ${filtered_prefix}.pvar > chunks.txt
+
+        NUM_CHUNKS=\$(wc -l < chunks.txt)
+        echo "Generated \${NUM_CHUNKS} chunks for ${fileTag} (after filtering)"
+
+        while IFS=\$'\\t' read -r from_var to_var; do
+            nameout="${study_arm}_${fileTag}_\${from_var}_\${to_var}"
+            echo "Exporting chunk: \${from_var} to \${to_var}"
+            plink2 \
+                --pfile ${filtered_prefix} \
+                --export A \
+                --from \${from_var} \
+                --to \${to_var} \
+                --out \${nameout} \
+                --threads ${task.cpus} \
+                --memory ${task.memory.toMega()}
+        done < chunks.txt
+    fi
     """
 }
 
