@@ -74,10 +74,10 @@ RUN /usr/local/bin/micromamba create -y -p ${MAMBA_ROOT_PREFIX} \
 
 # ============================================
 # PLINK2 - Download latest version from homepage
-# Using plink2_linux_x86_64_20251205 for --update-chr support
+# Using plink2_linux_x86_64_20251230 for --update-chr support
 # ============================================
 
-RUN wget -q https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20251205.zip -O /tmp/plink2.zip && \
+RUN wget -q https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20251230.zip -O /tmp/plink2.zip && \
     cd /tmp && \
     unzip -q plink2.zip && \
     mv plink2 /usr/local/bin/plink2 && \
