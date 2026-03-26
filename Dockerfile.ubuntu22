@@ -210,8 +210,10 @@ RUN micromamba run -n base pip install --no-cache-dir tables
 # tableone: Generate descriptive statistics tables
 # lifelines: Kaplan-Meier survival curves
 # matplotlib: Plotting library (already has numpy/scipy deps)
+# pyyaml: YAML file parsing (required by tableone.py)
 # ============================================
 RUN micromamba run -n base pip install --no-cache-dir \
+    pyyaml==6.0.1 \
     tableone==0.9.6 \
     lifelines==0.29.0 \
     matplotlib==3.8.2
@@ -233,4 +235,5 @@ WORKDIR /workspace
 # Verify all tools
 RUN python3 --version && R --version && plink2 --version && \
     bcftools --version && gsutil version && liftOver 2>&1 | head -1 && \
-    Rscript -e "library(survival); library(optparse); cat('✅ All installed!\n')"
+    Rscript -e "library(survival); library(optparse); cat('✅ R packages installed!\n')" && \
+    python3 -c "import yaml, pandas, numpy, tableone, matplotlib, lifelines; print('✅ Python packages for tableone.py installed!')"
