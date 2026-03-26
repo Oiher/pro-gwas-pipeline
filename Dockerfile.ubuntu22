@@ -206,6 +206,17 @@ RUN micromamba run -n base pip install --force-reinstall --no-cache-dir --no-dep
 RUN micromamba run -n base pip install --no-cache-dir tables
 
 # ============================================
+# Table 1 and survival analysis packages
+# tableone: Generate descriptive statistics tables
+# lifelines: Kaplan-Meier survival curves
+# matplotlib: Plotting library (already has numpy/scipy deps)
+# ============================================
+RUN micromamba run -n base pip install --no-cache-dir \
+    tableone==0.9.6 \
+    lifelines==0.29.0 \
+    matplotlib==3.8.2
+
+# ============================================
 # GALLOP Python dependencies - Added at end for easy debugging
 # Required for bin/gallop.py longitudinal mixed model analysis
 # ============================================
