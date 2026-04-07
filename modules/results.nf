@@ -4,6 +4,7 @@
 // Consolidated module containing GWAS results output processes:
 // - SAVEGWAS: Collect and merge GWAS results, publish to output directory
 // - MANHATTAN: Generate Manhattan plots from GWAS results
+// - TABLEONE: Generate Table 1 and Kaplan-Meier plots for descriptive statistics
 // ==============================================================================
 
 process SAVEGWAS {
@@ -55,5 +56,24 @@ process MANHATTAN {
   script:
     """
     manhattan.py --input ${input_file} --model ${model}
+    """
+}
+
+process TABLEONE {
+  scratch true
+  label 'small'
+  
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true
+
+  input:
+    path(yaml_config)
+
+  output:
+    path "table1_*.csv", optional: true
+    path "*_km_plot.png", optional: true
+
+  script:
+    """
+    tableone.py ${yaml_config}
     """
 }

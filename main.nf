@@ -49,7 +49,7 @@ params.datetime = new java.text.SimpleDateFormat("YYYY-MM-dd'T'HHMMSS").format(d
 include { CHECK_REFERENCES; SPLIT_VCF; GENETICQC; GENETICQCPLINK; MERGER_CHUNKS; LD_PRUNE_CHR; MERGER_CHRS; SIMPLE_QC; GWASQC } from './modules/qc.nf'
 include { MAKEANALYSISSETS; COMPUTE_PCA; MERGE_PCA; HARMONIZE_CATEGORICAL_COVARS; RAWFILE_EXPORT; EXPORT_PLINK } from './modules/dataprep.nf'
 include { GWASGLM; GWASGALLOP; GWASCPH } from './modules/gwas.nf'
-include { SAVEGWAS; MANHATTAN } from './modules/results.nf'
+include { SAVEGWAS; MANHATTAN; TABLEONE } from './modules/results.nf'
 
 /* 
  * Get the cache and the input check channels
@@ -380,6 +380,47 @@ workflow {
     if (params.mh_plot) {
         MANHATTAN(SAVEGWAS.out.res_all.collect(), MODEL)
     }
+    
+    // ==================================================================================
+    // TABLE 1 AND DESCRIPTIVE STATISTICS
+    // ==================================================================================
+    // Create a temporary YAML config file with all analysis parameters for tableone.py
+    // This runs after GWAS to ensure filtered analysis sets are available
+    Channel
+        .fromPath("${launchDir}/*.yml")
+        .filter{ it.name.contains(params.analysis_name) || 
+                 it.text.contains("analysis_name: \"${params.analysis_name}\"") ||
+                 it.text.contains("analysis_name: ${params.analysis_name}") }
+        .first()
+        .ifEmpty{ 
+            // If no matching YAML found, create one from params
+            Channel.of(file("${workDir}/temp_config_${params.analysis_name}.yml")).map{ f ->
+                f.text = """
+STORE_ROOT: ${params.STORE_ROOT}
+PROJECT_NAME: ${params.PROJECT_NAME}
+analysis_name: ${params.analysis_name}
+input: ${params.input}
+covarfile: ${params.covarfile}
+phenofile: ${params.phenofile}
+pheno_name: ${params.pheno_name}
+study_arm_col: ${params.study_arm_col}
+covar_numeric: ${params.covar_numeric}
+covar_categorical: ${params.covar_categorical}
+time_col: ${params.time_col}
+longitudinal_flag: ${params.longitudinal_flag}
+survival_flag: ${params.survival_flag}
+ancestry: ${params.ancestry}
+assembly: ${params.assembly}
+minor_allele_freq: ${params.minor_allele_freq}
+kinship: ${params.kinship}
+skip_pop_split: ${params.skip_pop_split}
+"""
+                return f
+            }
+        }
+        .set{ yaml_config_ch }
+    
+    TABLEONE(yaml_config_ch)
 }
 
 /*
