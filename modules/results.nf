@@ -74,6 +74,6 @@ process TABLEONE {
 
   script:
     """
-    tableone.py ${yaml_config}
+    make_tableone.py ${yaml_config}
     """
 }

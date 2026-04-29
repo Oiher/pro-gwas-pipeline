@@ -384,7 +384,7 @@ workflow {
     // ==================================================================================
     // TABLE 1 AND DESCRIPTIVE STATISTICS
     // ==================================================================================
-    // Create a temporary YAML config file with all analysis parameters for tableone.py
+    // Create a temporary YAML config file with all analysis parameters for make_tableone.py
     // This runs after GWAS to ensure filtered analysis sets are available
     Channel
         .fromPath("${launchDir}/*.yml")

@@ -20,8 +20,8 @@ from lifelines import KaplanMeierFitter
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: tableone.py <config.yml>")
-        print("Example: tableone.py analysis_config.yml")
+        print("Usage: make_tableone.py <config.yml>")
+        print("Example: make_tableone.py analysis_config.yml")
         sys.exit(1)
 
     yaml_file = sys.argv[1]
