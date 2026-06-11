@@ -387,16 +387,21 @@ workflow {
     // Create a temporary YAML config file with all analysis parameters for make_tableone.py
     // This runs after GWAS to ensure filtered analysis sets are available
     Channel
-        .fromPath("${launchDir}/*.yml")
+        .fromPath("${launchDir}/*.yml", checkIfExists: false)
         .filter{ it.name.contains(params.analysis_name) || 
                  it.text.contains("analysis_name: \"${params.analysis_name}\"") ||
                  it.text.contains("analysis_name: ${params.analysis_name}") }
-        .first()
-        .ifEmpty{ 
-            // If no matching YAML found, create one from params
-            Channel.of(file("${workDir}/temp_config_${params.analysis_name}.yml")).map{ f ->
-                f.text = """
-STORE_ROOT: ${params.STORE_ROOT}
+        .mix(
+            Channel.fromPath("${launchDir}/*.yml", checkIfExists: false)
+                .filter{ it.name.contains(params.analysis_name) || 
+                         it.text.contains("analysis_name: \"${params.analysis_name}\"") ||
+                         it.text.contains("analysis_name: ${params.analysis_name}") }
+                .count()
+                .filter{ it == 0 }
+                .map{ 
+                    // If no matching YAML found, create one from params
+                    def f = file("${workDir}/temp_config_${params.analysis_name}.yml")
+                    f.text = """STORE_ROOT: ${params.STORE_ROOT}
 PROJECT_NAME: ${params.PROJECT_NAME}
 analysis_name: ${params.analysis_name}
 input: ${params.input}
@@ -415,9 +420,10 @@ minor_allele_freq: ${params.minor_allele_freq}
 kinship: ${params.kinship}
 skip_pop_split: ${params.skip_pop_split}
 """
-                return f
-            }
-        }
+                    return f
+                }
+        )
+        .first()
         .set{ yaml_config_ch }
     
     TABLEONE(yaml_config_ch)
