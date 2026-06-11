@@ -324,11 +324,17 @@ workflow {
         
         // For GLM: use gallop_plink_input (already grouped per chromosome)
         // Unpack PLINK files: convert from [fileTag, [files]] to [fileTag, log, pgen, psam, pvar]
-        // Note: groupTuple sorts files alphabetically, so order is: log, pgen, psam, pvar
+        // Files are selected by extension for robustness (not positional indexing)
         // Then combine each chunk with PLINK_SAMPLE_LIST (1 sample list applies to all 22 chromosomes)
         gallop_plink_input
-            .map{ fileTag, plinkFiles -> 
-                tuple(fileTag, plinkFiles[0], plinkFiles[1], plinkFiles[2], plinkFiles[3])
+            .map{ fileTag, plinkFiles ->
+                tuple(
+                    fileTag,
+                    plinkFiles.find { it.extension == 'log' },
+                    plinkFiles.find { it.extension == 'pgen' },
+                    plinkFiles.find { it.extension == 'psam' },
+                    plinkFiles.find { it.extension == 'pvar' }
+                )
             }
             .combine(PLINK_SAMPLE_LIST)
             .set{ CHUNKS }
@@ -426,7 +432,7 @@ skip_pop_split: ${params.skip_pop_split}
         .first()
         .set{ yaml_config_ch }
     
-    TABLEONE(yaml_config_ch)
+    TABLEONE(yaml_config_ch, MAKEANALYSISSETS.out.analytical_set)
 }
 
 /*

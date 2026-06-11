@@ -356,11 +356,20 @@ process MERGER_CHUNKS {
     echo "Merging \$CHUNK_COUNT chunks"
     echo ""
     
-    plink2 --pmerge-list filtered_mergelist.txt \
-      --make-pgen \
-      --sort-vars \
-      --threads ${task.cpus} \
-      --out ${fileTag}
+    if [ "\$CHUNK_COUNT" -eq 1 ]; then
+      # Only one chunk - no merge needed, just rename files directly
+      SINGLE=\$(cat filtered_mergelist.txt)
+      cp "\${SINGLE}.pgen" "${fileTag}.pgen"
+      cp "\${SINGLE}.pvar" "${fileTag}.pvar"
+      cp "\${SINGLE}.psam" "${fileTag}.psam"
+      cp "\${SINGLE}.log"  "${fileTag}.log" 2>/dev/null || touch "${fileTag}.log"
+    else
+      plink2 --pmerge-list filtered_mergelist.txt \
+        --make-pgen \
+        --sort-vars \
+        --threads ${task.cpus} \
+        --out ${fileTag}
+    fi
     """
 }
 

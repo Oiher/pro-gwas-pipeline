@@ -36,8 +36,8 @@ def main():
     phenofile = config['phenofile']
     pheno_name = config['pheno_name']
     study_arm_col = config.get('study_arm_col', 'study_arm')
-    covar_numeric = config.get('covar_numeric', '').split()
-    covar_categorical = config.get('covar_categorical', '').split()
+    covar_numeric = (config.get('covar_numeric') or '').split()
+    covar_categorical = (config.get('covar_categorical') or '').split()
     time_col = config.get('time_col', 'study_days')
     longitudinal_flag = config.get('longitudinal_flag', False)
     survival_flag = config.get('survival_flag', False)
@@ -219,6 +219,14 @@ def main():
         
         # Filter to only existing columns
         columns_for_table = [col for col in columns_for_table if col in merged.columns]
+        
+        # Remove columns with no variation (would cause statistical test failures)
+        no_variation = [col for col in columns_for_table if merged[col].nunique() <= 1]
+        if no_variation:
+            print(f"Dropping zero-variation columns: {no_variation}")
+        columns_for_table = [col for col in columns_for_table if col not in no_variation]
+        categorical_cols = [col for col in categorical_cols if col not in no_variation]
+        nonnormal_cols = [col for col in nonnormal_cols if col not in no_variation]
         
         print(f"Variables for Table 1: {columns_for_table}")
         print(f"Categorical variables: {categorical_cols}")

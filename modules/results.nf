@@ -67,6 +67,7 @@ process TABLEONE {
 
   input:
     path(yaml_config)
+    path(analytical_set)
 
   output:
     path "table1_*.csv", optional: true
