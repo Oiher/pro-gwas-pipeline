@@ -14,6 +14,17 @@ import plotly.io
 
 from qc import shell_do, het_prune, callrate_prune, merge_genos, get_outlier_ranges, ancestry_prune, king_prune, report_outliers, plot_3d
 
+def read_plink2_idfile(path, sep=r'\s+'):
+    """Read any PLINK2 ID-containing file (#FID IID or #IID-only format).
+    Always returns a DataFrame with 'FID' and 'IID' string columns (FID=IID when only IID present)."""
+    df = pd.read_csv(path, sep=sep, dtype=str)
+    if '#IID' in df.columns and 'FID' not in df.columns and '#FID' not in df.columns:
+        df.rename(columns={'#IID': 'IID'}, inplace=True)
+        df.insert(0, 'FID', df['IID'])
+    elif '#FID' in df.columns:
+        df.rename(columns={'#FID': 'FID'}, inplace=True)
+    return df
+
 parser = argparse.ArgumentParser(description='Arguments for Genotyping QC (data in Plink .bim/.bam/.fam format)')
 parser.add_argument('--geno', type=str, default='nope', help='Genotype: (string file path). Path to PLINK format genotype file, everything before the *.bed/bim/fam [default: nope].')
 parser.add_argument('--ref', type=str, default='nope', help='Genotype: (string file path). Path to PLINK format reference genotype file, everything before the *.bed/bim/fam.')
@@ -46,7 +57,7 @@ shell_do(make_bed_cmd)
 ancestry = ancestry_prune(het_out, ref_path, ref_labels, ancestry_out, target_label=pop)
 
 # make plots for pcs
-total_pcs = pd.read_csv(f"{ancestry['output']['plink_out']}.pca.eigenvec", sep=r'\s+', header=None, names=['FID','IID','PC1','PC2','PC3','PC4','PC5','PC6','PC7','PC8','PC9','PC10'], dtype={'FID':str,'IID':str})
+total_pcs = read_plink2_idfile(f"{ancestry['output']['plink_out']}.pca.eigenvec")
 labels = pd.read_csv(ref_labels,sep='\t', header=None, names=['FID','IID','label'])
 pcs_merge = total_pcs.merge(labels, on=['FID','IID'], how='left')
 pcs_merge.label.fillna('new', inplace=True)
@@ -59,7 +70,7 @@ pc3_range = [pcs_merge.PC3.min(), pcs_merge.PC3.max()]
 plot_3d(pcs_merge, color='label', symbol=None, plot_out=f'{out_path}_total_pcs_plot', x='PC1', y='PC2', z='PC3', title='Reference Panel + New Sample PCs', x_range=pc1_range, y_range=pc2_range, z_range=pc3_range)
 
 new_pcs = pcs_merge.loc[pcs_merge.label == 'new']
-keep_samples = pd.read_csv(ancestry['output']['keep_samples'], sep='\t', dtype={'FID':str,'IID':str})
+keep_samples = read_plink2_idfile(ancestry['output']['keep_samples'], sep='\t')
 keep_samples.loc[:,'keep'] = True
 new_pcs_keep = new_pcs.merge(keep_samples, how='left', on=['FID','IID'])
 new_pcs_keep.loc[:,'keep'] = np.where(new_pcs_keep.keep == True, new_pcs_keep.keep, False)
@@ -90,7 +101,7 @@ outliers = report_outliers(steps, outliers_path)
 
 
 # now add relevant dfs to hdf
-ancestry_keep = pd.read_csv(ancestry['output']['keep_samples'], sep='\t')
+ancestry_keep = read_plink2_idfile(ancestry['output']['keep_samples'], sep='\t')
 
 
 # generate final pcs
