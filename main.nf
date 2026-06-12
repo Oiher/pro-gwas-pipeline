@@ -406,7 +406,7 @@ workflow {
                 .filter{ it == 0 }
                 .map{ 
                     // If no matching YAML found, create one from params
-                    def f = file("${workDir}/temp_config_${params.analysis_name}.yml")
+                    def f = file("${launchDir}/temp_config_${params.analysis_name}.yml")
                     f.text = """STORE_ROOT: ${params.STORE_ROOT}
 PROJECT_NAME: ${params.PROJECT_NAME}
 analysis_name: ${params.analysis_name}
