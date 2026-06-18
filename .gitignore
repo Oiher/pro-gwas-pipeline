@@ -160,5 +160,6 @@ timeline-*.html
 trace-*.txt
 .nextflow.log*
 test*
+temp*
 proj*
 proj*/
