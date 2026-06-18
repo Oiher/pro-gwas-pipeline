@@ -15,14 +15,42 @@ import plotly.io
 from qc import shell_do, het_prune, callrate_prune, merge_genos, get_outlier_ranges, ancestry_prune, king_prune, report_outliers, plot_3d
 
 def read_plink2_idfile(path, sep=r'\s+'):
-    """Read any PLINK2 ID-containing file (#FID IID or #IID-only format).
-    Always returns a DataFrame with 'FID' and 'IID' string columns (FID=IID when only IID present)."""
-    df = pd.read_csv(path, sep=sep, dtype=str)
-    if '#IID' in df.columns and 'FID' not in df.columns and '#FID' not in df.columns:
-        df.rename(columns={'#IID': 'IID'}, inplace=True)
-        df.insert(0, 'FID', df['IID'])
-    elif '#FID' in df.columns:
+    """Read PLINK ID-containing files with or without headers.
+
+    Supports:
+    - Headered FID/IID:   #FID IID ... or FID IID ...
+    - Headered IID-only:  #IID ... or IID ... (synthesizes FID=IID)
+    - Headerless rows:    FID IID ... (PLINK1-style eigenvec/keep)
+    """
+    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+        first = f.readline().strip()
+
+    first_token = first.split()[0] if first else ''
+    has_header = first_token.startswith('#') or first_token in ('FID', 'IID')
+
+    if has_header:
+        df = pd.read_csv(path, sep=sep, dtype=str)
+    else:
+        # Headerless PLINK-style file: first two columns are FID/IID.
+        df = pd.read_csv(path, sep=sep, dtype=str, header=None)
+        if df.shape[1] < 2:
+            raise ValueError(f"Expected at least 2 columns (FID/IID) in {path}")
+        rename_map = {0: 'FID', 1: 'IID'}
+        # Name remaining columns for eigenvec-like files.
+        for i in range(2, df.shape[1]):
+            rename_map[i] = f'PC{i-1}'
+        df.rename(columns=rename_map, inplace=True)
+
+    if '#FID' in df.columns:
         df.rename(columns={'#FID': 'FID'}, inplace=True)
+    if '#IID' in df.columns:
+        df.rename(columns={'#IID': 'IID'}, inplace=True)
+
+    if 'IID' not in df.columns:
+        raise ValueError(f"IID column not found in {path}")
+    if 'FID' not in df.columns:
+        df.insert(0, 'FID', df['IID'])
+
     return df
 
 parser = argparse.ArgumentParser(description='Arguments for Genotyping QC (data in Plink .bim/.bam/.fam format)')
