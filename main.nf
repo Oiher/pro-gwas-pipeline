@@ -390,24 +390,12 @@ workflow {
     // ==================================================================================
     // TABLE 1 AND DESCRIPTIVE STATISTICS
     // ==================================================================================
-    // Create a temporary YAML config file with all analysis parameters for make_tableone.py
-    // This runs after GWAS to ensure filtered analysis sets are available
+    // Always generate the YAML config fresh from params so stale temp files are never reused
     Channel
-        .fromPath("${launchDir}/*.yml", checkIfExists: false)
-        .filter{ it.name.contains(params.analysis_name) || 
-                 it.text.contains("analysis_name: \"${params.analysis_name}\"") ||
-                 it.text.contains("analysis_name: ${params.analysis_name}") }
-        .mix(
-            Channel.fromPath("${launchDir}/*.yml", checkIfExists: false)
-                .filter{ it.name.contains(params.analysis_name) || 
-                         it.text.contains("analysis_name: \"${params.analysis_name}\"") ||
-                         it.text.contains("analysis_name: ${params.analysis_name}") }
-                .count()
-                .filter{ it == 0 }
-                .map{ 
-                    // If no matching YAML found, create one from params
-                    def f = file("${launchDir}/temp_config_${params.analysis_name}.yml")
-                    f.text = """STORE_ROOT: ${params.STORE_ROOT}
+        .of(1)
+        .map{
+            def f = file("${launchDir}/temp_config_${params.analysis_name}.yml")
+            f.text = """STORE_ROOT: ${params.STORE_ROOT}
 PROJECT_NAME: ${params.PROJECT_NAME}
 analysis_name: ${params.analysis_name}
 input: ${params.input}
@@ -426,10 +414,8 @@ minor_allele_freq: ${params.minor_allele_freq}
 kinship: ${params.kinship}
 skip_pop_split: ${params.skip_pop_split}
 """
-                    return f
-                }
-        )
-        .first()
+            return f
+        }
         .set{ yaml_config_ch }
     
     TABLEONE(yaml_config_ch, MAKEANALYSISSETS.out.analytical_set, file(params.covarfile), file(params.phenofile))
