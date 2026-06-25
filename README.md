@@ -80,7 +80,7 @@ graph TD
 
 ### Prerequisites
 
-- **Nextflow** >= 21.04.0 (DSL2 required)
+- **Nextflow** >= 21.04.0 (DSL2 required) and < 26.04.0
   ```bash
   # Check your version
   nextflow -version
@@ -91,6 +91,16 @@ graph TD
 - **Docker** or **Singularity** (for containerized execution)
   - Docker Desktop (Mac/Windows) or Docker Engine (Linux)
   - OR Singularity/Apptainer (HPC environments)
+
+> **Important (Parser Compatibility):**
+> - **Nextflow 26.04+**: set parser mode explicitly before running:
+>   ```bash
+>   export NXF_SYNTAX_VERSION=v1
+>   ```
+>   or prefix each command:
+>   ```bash
+>   NXF_SYNTAX_VERSION=v1 nextflow run main.nf -profile standard -params-file conf/examples/test_survival.yml
+>   ```
 
 ### Clone Repository
 
