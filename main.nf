@@ -411,8 +411,8 @@ workflow {
 PROJECT_NAME: ${params.PROJECT_NAME}
 analysis_name: ${params.analysis_name}
 input: ${params.input}
-covarfile: ${params.covarfile}
-phenofile: ${params.phenofile}
+covarfile: ${file(params.covarfile).name}
+phenofile: ${file(params.phenofile).name}
 pheno_name: ${params.pheno_name}
 study_arm_col: ${params.study_arm_col}
 covar_numeric: ${params.covar_numeric}
@@ -432,7 +432,7 @@ skip_pop_split: ${params.skip_pop_split}
         .first()
         .set{ yaml_config_ch }
     
-    TABLEONE(yaml_config_ch, MAKEANALYSISSETS.out.analytical_set)
+    TABLEONE(yaml_config_ch, MAKEANALYSISSETS.out.analytical_set, file(params.covarfile), file(params.phenofile))
 }
 
 /*

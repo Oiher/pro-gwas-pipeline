@@ -68,6 +68,8 @@ process TABLEONE {
   input:
     path(yaml_config)
     path(analytical_set)
+    path(covarfile)
+    path(phenofile)
 
   output:
     path "table1_*.csv", optional: true
