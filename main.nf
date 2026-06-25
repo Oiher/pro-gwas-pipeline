@@ -390,35 +390,7 @@ workflow {
     // ==================================================================================
     // TABLE 1 AND DESCRIPTIVE STATISTICS
     // ==================================================================================
-    // Always generate the YAML config fresh from params so stale temp files are never reused
-    Channel
-        .of(1)
-        .map{
-            def f = file("${launchDir}/temp_config_${params.analysis_name}.yml")
-            f.text = """STORE_ROOT: ${params.STORE_ROOT}
-PROJECT_NAME: ${params.PROJECT_NAME}
-analysis_name: ${params.analysis_name}
-input: ${params.input}
-covarfile: ${file(params.covarfile).name}
-phenofile: ${file(params.phenofile).name}
-pheno_name: ${params.pheno_name}
-study_arm_col: ${params.study_arm_col}
-covar_numeric: ${params.covar_numeric}
-covar_categorical: ${params.covar_categorical}
-time_col: ${params.time_col}
-longitudinal_flag: ${params.longitudinal_flag}
-survival_flag: ${params.survival_flag}
-ancestry: ${params.ancestry}
-assembly: ${params.assembly}
-minor_allele_freq: ${params.minor_allele_freq}
-kinship: ${params.kinship}
-skip_pop_split: ${params.skip_pop_split}
-"""
-            return f
-        }
-        .set{ yaml_config_ch }
-    
-    TABLEONE(yaml_config_ch, MAKEANALYSISSETS.out.analytical_set, file(params.covarfile), file(params.phenofile))
+    TABLEONE(MAKEANALYSISSETS.out.analytical_set, file(params.covarfile), file(params.phenofile))
 }
 
 /*

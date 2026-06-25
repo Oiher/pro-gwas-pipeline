@@ -6,12 +6,10 @@ Reads configuration from YAML file and produces:
 - KM survival curves (if survival_flag is true)
 """
 
+import argparse
 import pandas as pd
 import numpy as np
-import yaml
 import sys
-import os
-from pathlib import Path
 from tableone import TableOne
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend for server environments
@@ -19,48 +17,41 @@ import matplotlib.pyplot as plt
 from lifelines import KaplanMeierFitter
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: make_tableone.py <config.yml>")
-        print("Example: make_tableone.py analysis_config.yml")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description='Generate Table 1 and Kaplan-Meier plots for GWAS analyses'
+    )
+    parser.add_argument('covarfile',      help='Covariate file (TSV)')
+    parser.add_argument('phenofile',      help='Phenotype file (TSV)')
+    parser.add_argument('analytical_set', help='Filtered analysis set from MAKEANALYSISSETS (TSV)')
+    parser.add_argument('--pheno-name',        required=True,         dest='pheno_name')
+    parser.add_argument('--study-arm-col',     default='study_arm',   dest='study_arm_col')
+    parser.add_argument('--covar-numeric',     nargs='*', default=[], dest='covar_numeric')
+    parser.add_argument('--covar-categorical', nargs='*', default=[], dest='covar_categorical')
+    parser.add_argument('--time-col',          default='study_days',  dest='time_col')
+    parser.add_argument('--longitudinal',      action='store_true')
+    parser.add_argument('--survival',          action='store_true')
+    parser.add_argument('--ancestry',          default='EUR')
+    parser.add_argument('--analysis-name',     default='TEST',        dest='analysis_name')
+    args = parser.parse_args()
 
-    yaml_file = sys.argv[1]
-    with open(yaml_file, 'r') as f:
-        config = yaml.safe_load(f)
+    covarfile         = args.covarfile
+    phenofile         = args.phenofile
+    analytical_set    = args.analytical_set
+    pheno_name        = args.pheno_name
+    study_arm_col     = args.study_arm_col
+    covar_numeric     = args.covar_numeric
+    covar_categorical = args.covar_categorical
+    time_col          = args.time_col
+    longitudinal_flag = args.longitudinal
+    survival_flag     = args.survival
+    ancestry          = args.ancestry
+    analysis_name     = args.analysis_name
 
-    # Extract variables from config
-    STORE_ROOT = config.get('STORE_ROOT', os.getenv('STORE_ROOT', os.getcwd()))
-    PROJECT_NAME = config.get('PROJECT_NAME', 'unnamed_project')
-    analysis_name = config.get('analysis_name', 'TEST')
-    covarfile = config['covarfile']
-    phenofile = config['phenofile']
-    pheno_name = config['pheno_name']
-    study_arm_col = config.get('study_arm_col', 'study_arm')
-    covar_numeric = (config.get('covar_numeric') or '').split()
-    covar_categorical = (config.get('covar_categorical') or '').split()
-    time_col = config.get('time_col', 'study_days')
-    longitudinal_flag = config.get('longitudinal_flag', False)
-    survival_flag = config.get('survival_flag', False)
-    ancestry = config.get('ancestry', 'EUR')
-    assembly = config.get('assembly', 'hg38')
-    minor_allele_freq = config.get('minor_allele_freq', '0.01')
-    kinship = config.get('kinship', '0.177')
-    skip_pop_split = config.get('skip_pop_split', False)
-
-    # Compute genetic cache key (matching params.config logic)
-    skip_suffix = "_skip" if skip_pop_split else ""
-    input_file = config.get('input', '')
-    format_prefix = "bed" if ".bed" in input_file else ("pgen" if ".pgen" in input_file else "vcf")
-    genetic_cache_key = f"{format_prefix}_{ancestry}_{assembly}_maf{minor_allele_freq}_kin{kinship}{skip_suffix}"
-
-    print(f"Loaded config from: {yaml_file}")
-    print(f"STORE_ROOT: {STORE_ROOT}")
-    print(f"Project: {PROJECT_NAME}")
     print(f"Analysis: {analysis_name}")
-    print(f"Genetic cache key: {genetic_cache_key}")
+    print(f"Ancestry: {ancestry}")
     print()
 
-    # Read covariate and phenotype files using variables from yaml
+    # Read covariate and phenotype files
     print(f"Reading covariate file: {covarfile}")
     cov = pd.read_csv(covarfile, sep='\t')
     print(f"Covariates shape: {cov.shape}")
@@ -71,15 +62,8 @@ def main():
     print(f"Phenotype column: {pheno_name}")
     print()
 
-    filtered_covarfile = f"{STORE_ROOT}/{PROJECT_NAME}/analyses/{genetic_cache_key}/{analysis_name}/prepared_data/{ancestry}_all.tsv"
-    print(f"Reading filtered analysis set: {filtered_covarfile}")
-    
-    if not Path(filtered_covarfile).exists():
-        print(f"ERROR: Filtered covariate file not found: {filtered_covarfile}")
-        print("Please run the full GWAS pipeline first to generate the filtered analysis set.")
-        sys.exit(1)
-    
-    filtered_covar = pd.read_csv(filtered_covarfile, sep='\t')
+    print(f"Reading filtered analysis set: {analytical_set}")
+    filtered_covar = pd.read_csv(analytical_set, sep='\t')
     print(f"Samples after filtering: {filtered_covar.shape[0]}")
 
     # Merge covariates and phenotypes for Table 1
@@ -261,11 +245,8 @@ def main():
             print(table1)
             print()
             
-            # Save to file in prepared_data directory
-            output_dir = f"{STORE_ROOT}/{PROJECT_NAME}/analyses/{genetic_cache_key}/{analysis_name}/prepared_data"
-            Path(output_dir).mkdir(parents=True, exist_ok=True)
-            
-            output_file = f"{output_dir}/table1_{analysis_name}.csv"
+            # Save to current directory (Nextflow publishDir handles routing)
+            output_file = f"table1_{analysis_name}.csv"
             table1.to_csv(output_file)
             print(f"Table 1 saved to: {output_file}")
             print()
@@ -351,11 +332,8 @@ def main():
                 plt.legend(loc='best')
                 plt.grid(True, alpha=0.3)
                 
-                # Save plot in prepared_data directory
-                km_output_dir = f"{STORE_ROOT}/{PROJECT_NAME}/analyses/{genetic_cache_key}/{analysis_name}/prepared_data"
-                Path(km_output_dir).mkdir(parents=True, exist_ok=True)
-                
-                km_plot_file = f"{km_output_dir}/{ancestry}_km_plot.png"
+                # Save to current directory (Nextflow publishDir handles routing)
+                km_plot_file = f"{ancestry}_km_plot.png"
                 plt.savefig(km_plot_file, dpi=300, bbox_inches='tight')
                 print(f"\nKaplan-Meier plot saved to: {km_plot_file}")
                 plt.close()

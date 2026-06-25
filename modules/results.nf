@@ -66,7 +66,6 @@ process TABLEONE {
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true
 
   input:
-    path(yaml_config)
     path(analytical_set)
     path(covarfile)
     path(phenofile)
@@ -77,6 +76,18 @@ process TABLEONE {
 
   script:
     """
-    make_tableone.py ${yaml_config}
+    make_tableone.py \\
+        ${covarfile} \\
+        ${phenofile} \\
+        ${analytical_set} \\
+        --pheno-name '${params.pheno_name}' \\
+        --study-arm-col '${params.study_arm_col}' \\
+        --time-col '${params.time_col}' \\
+        --ancestry '${params.ancestry}' \\
+        --analysis-name '${params.analysis_name}' \\
+        ${params.covar_numeric     ? "--covar-numeric ${params.covar_numeric}"         : ''} \\
+        ${params.covar_categorical ? "--covar-categorical ${params.covar_categorical}" : ''} \\
+        ${params.longitudinal_flag ? '--longitudinal' : ''} \\
+        ${params.survival_flag     ? '--survival'     : ''}
     """
 }
