@@ -76,6 +76,12 @@ Channel
 
 Channel
    .fromPath(params.input)
+   // Fail fast if the glob matched nothing. Without this, an empty match here
+   // silently propagates to zero tasks in every downstream genotype-processing
+   // process, and the pipeline reports "succeeded" having done nothing -- e.g.
+   // a VWB-mounted resource path (/home/jupyter/...) used instead of the
+   // actual gs:// URI, or a typo in the glob.
+   .ifEmpty { error("No genotype files matched --input: '${params.input}'. Check the path/glob is correct and reachable -- on Google Batch this must be a real gs:// URI, not a local VM-mounted resource path.") }
    .map{ f -> tuple(f.getSimpleName(), f) }
    .set{ input_check_ch }
 
