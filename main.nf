@@ -66,13 +66,13 @@ include { MAKEANALYSISSETS; COMPUTE_PCA; MERGE_PCA; HARMONIZE_CATEGORICAL_COVARS
 include { GWASGLM; GWASGALLOP; GWASCPH } from './modules/gwas.nf'
 include { SAVEGWAS; MANHATTAN; TABLEONE } from './modules/results.nf'
 
-/* 
+/*
  * Get the cache and the input check channels
  */
 Channel
   .fromPath("${params.project_dir}/genotypes/${params.genetic_cache_key}/chromosomes/*/*.{pgen,pvar,psam,log}", checkIfExists: false)
   .map{ f -> tuple(f.getSimpleName(), f) }
-  .set{ cache }
+  .set{ cache_raw }
 
 Channel
    .fromPath(params.input)
@@ -84,6 +84,39 @@ Channel
    .ifEmpty { error("No genotype files matched --input: '${params.input}'. Check the path/glob is correct and reachable -- on Google Batch this must be a real gs:// URI, not a local VM-mounted resource path.") }
    .map{ f -> tuple(f.getSimpleName(), f) }
    .set{ input_check_ch }
+
+/*
+ * Guard against genetic_cache_key/genetic_data_id being reused across incompatible
+ * input file sets (e.g. two analyses that each pre-filter the same "cohort" to a
+ * different, non-overlapping sample subset, but share a genetic_data_id).
+ * cache_raw above lists everything ever cached under this cache key on disk,
+ * regardless of whether it belongs to THIS run's --input -- restrict it to only
+ * fileTags this run's --input actually matches, and warn if stale entries were
+ * found and excluded. Without this, MERGER_CHRS would silently merge chromosome
+ * files from an unrelated, non-overlapping sample set into this run's dataset.
+ * (List values are wrapped in an extra list -- Channel.combine() auto-flattens a
+ * bare List value into separate tuple elements, so wrapping is what keeps it as
+ * one list-typed value in the combined tuple.)
+ */
+input_check_ch.map{ fileTag, f -> fileTag }.unique().toList()
+    .map{ tags -> [tags] }
+    .set{ validTagsWrapped }
+
+cache_raw.map{ fileTag, f -> fileTag }.unique().toList()
+    .map{ tags -> [tags] }
+    .combine(validTagsWrapped)
+    .subscribe{ cacheTags, validTags ->
+        def stale = cacheTags - validTags
+        if (stale) {
+            log.warn "genetic_cache_key '${params.genetic_cache_key}' has ${stale.size()} cached chromosome fileTag(s) that don't match this run's --input (e.g. ${stale.take(3).join(', ')}${stale.size() > 3 ? ', ...' : ''}) -- excluding them from this run. If this genetic_data_id was previously used for a different input file set, give each distinct input set its own genetic_data_id instead of relying on this filter."
+        }
+    }
+
+cache_raw
+    .combine(validTagsWrapped)
+    .filter{ fileTag, fCache, validTags -> fileTag in validTags }
+    .map{ fileTag, fCache, validTags -> tuple(fileTag, fCache) }
+    .set{ cache }
 
 /* 
  * Get the phenotypes arg on a channel
