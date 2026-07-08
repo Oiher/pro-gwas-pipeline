@@ -6,6 +6,21 @@
 nextflow.enable.dsl = 2
 
 /*
+ * Validate required parameters up front. Without this, a missing --input/--covarfile/--phenofile
+ * only surfaces much later as a generic "process input channel evaluates to null" error deep in
+ * the DAG (e.g. at MAKEANALYSISSETS) -- costly to hit on a cloud/Google Batch run.
+ */
+def missingParams = []
+if (!params.input)     missingParams << '--input (path to genotype VCF/PLINK files)'
+if (!params.covarfile) missingParams << '--covarfile (path to covariates file)'
+if (!params.phenofile) missingParams << '--phenofile (path to phenotype file)'
+if (missingParams) {
+    error("Missing required parameter(s):\n" +
+          missingParams.collect { "  - ${it}" }.join('\n') +
+          "\nProvide them via -params-file or --param value. See conf/examples/ for templates.")
+}
+
+/*
  * Main workflow log
  */
 if (params.longitudinal_flag) {
@@ -136,10 +151,12 @@ workflow {
         GENETICQCPLINK(plink_input_ch, reference_files)
         
         // Collect processing status for tracking
+        // NOTE: uses params.analyses_dir (conf/params.config), not a profile-level env{} var --
+        // see conf/params.config for why this was made an explicit param.
         GENETICQCPLINK.out.chunk_status
             .map{ fileTag, statusFile -> statusFile.text }
-            .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv", 
-                         storeDir: "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/logs/",
+            .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv",
+                         storeDir: "${params.analyses_dir}/${params.genetic_cache_key}/genetic_qc/logs/",
                          seed: "fileTag\tchunkId\tinput\tstart_time\tend_time\texit_code\tstatus\tvariants\n",
                          newLine: false)
         
@@ -173,8 +190,8 @@ workflow {
         // Collect processing status for tracking
         GENETICQC.out.chunk_status
             .map{ fileTag, chunkId, statusFile -> statusFile.text }
-            .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv", 
-                         storeDir: "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/logs/",
+            .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv",
+                         storeDir: "${params.analyses_dir}/${params.genetic_cache_key}/genetic_qc/logs/",
                          seed: "fileTag\tchunkId\tinput\tstart_time\tend_time\texit_code\tstatus\tvariants\n",
                          newLine: false)
 

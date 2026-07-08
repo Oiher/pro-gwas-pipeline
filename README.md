@@ -156,7 +156,7 @@ The pipeline is highly configurable. ./conf/ folder has configuration files for 
 ```
 conf/
 ├── examples/    # Example parameter YAML files for different analytical modes using example dataset
-├── profiles/    # Profile configurations for different execution environments (local, biowulf, gcb, etc)
+├── profiles/    # Profile configurations for different execution environments (local, biowulf, gcb_final, etc)
 ├── base.config  # Base configuration file common to all profiles
 └── param.config # All the paramaters with default values and explanations
 ```
@@ -175,7 +175,7 @@ The pipeline has pre-defined profiles for different execution environments. You 
 - `localtest`: Local execution with locally built Docker image (for development/testing)
 - `biowulf`: Biowulf cluster execution with Singularity
 - `biowulflocal`: Biowulf local execution without job submission
-- `gcb`: Google Cloud Batch execution (for Verily Workbench)
+- `gcb_final`: Google Cloud Batch execution (default settings target Verily Workbench; override `gcb_container`/`gcb_use_private_address` for other GCP projects -- see `conf/params.config`)
 
 These profiles can be customized in [conf/profiles/](conf/profiles/) folder.
 
@@ -292,7 +292,7 @@ cd ~/repos/long-gwas-pipeline
 
 git pull origin main  # Update to latest code
 
-wb nextflow run main.nf -profile gcb -params-file conf/examples/test_survival.yml -with-tower
+wb nextflow run main.nf -profile gcb_final -params-file conf/examples/test_survival.yml -with-tower
 ```
 
 
@@ -424,24 +424,28 @@ If the input is from GWASGALLOP, then modify the `run_metal.nf` to select the co
 #### Example
 Do meta-analysis for survival results of EUR and AJ populations with google cloud batch.
 
-Create `metal_surv.yml` with the following content, replacing `<YOUR_BUCKET>` with your actual GCS bucket name where the input files are located and where you want the output to be stored.
+Create `metal_surv.yml` with the following content, replacing `<YOUR_BUCKET>` with your actual GCS bucket name where the input files are located and where you want the output to be stored. `gcb_container`/`gcb_use_private_address` below are only needed if you're not running on Verily Workbench (they override the `gcb_final` profile's defaults -- see `conf/params.config`); omit them to use the VWB defaults.
 ```yml
 metal_input: "gs://<YOUR_BUCKET>/EUR_*_SURV_results.tsv.gz,gs://<YOUR_BUCKET>/AJ_*_SURV_results.tsv.gz"
 metal_outdir: "gs://<YOUR_BUCKET>/META/SURV"
 metal_prefix: "HY_SURV_META"
+gcb_container: "europe-west4-docker.pkg.dev/gp2-release-terra/long-gwas/long-gwas:latest"
+gcb_use_private_address: false
 ```
 
 Then run this command to execute the METAL meta-analysis:
 ```bash
-nextflow run metal.nf -profile gcb2 -params-file metal_surv.yml
+nextflow run metal.nf -profile gcb_final -params-file metal_surv.yml
 ```
 
 Or run directly:
 ```bash
-nextflow run metal.nf -profile gcb2 \
+nextflow run metal.nf -profile gcb_final \
   --metal_input "gs://bucket/path/EUR_*_SURV_results.tsv.gz,gs://bucket/path/AJ_*_SURV_results.tsv.gz" \
   --metal_outdir "gs://bucket/path/META/SURV" \
-  --metal_prefix "HY_SURV_META"
+  --metal_prefix "HY_SURV_META" \
+  --gcb_container "europe-west4-docker.pkg.dev/gp2-release-terra/long-gwas/long-gwas:latest" \
+  --gcb_use_private_address false
 ```
 
 ## Troubleshooting
