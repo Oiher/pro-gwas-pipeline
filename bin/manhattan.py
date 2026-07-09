@@ -66,12 +66,20 @@ def plot_summary_stats(data, cohort, outcome, model):
     # their variant ID -- qmplot dedupes to one label per ~50kb LD block
     # (ld_block_size) so a cluster of correlated significant SNPs at the same
     # locus doesn't produce overlapping labels.
+    # text_kws.arrowprops: qmplot's internal adjust_text() repels labels away
+    # from each other and from data points to avoid overlap, which on dense
+    # real GWAS data (vs. a handful of well-separated hits) can push a label
+    # a real distance from its point. Without arrowprops, qmplot draws no
+    # connector at all, so a repositioned label looks like it's floating
+    # disconnected from any dot. This draws a thin leader line from each
+    # label back to its actual point.
     sig_kws = dict(
         snp="ID",
         suggestiveline=NOMINAL_P,
         genomewideline=MTC_P,
         sign_marker_p=NOMINAL_P,
         is_annotate_topsnp=True,
+        text_kws=dict(arrowprops=dict(arrowstyle="-", color="black", alpha=0.6, lw=0.5)),
     )
 
     if model == "lmm_gallop":
