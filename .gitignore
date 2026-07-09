@@ -163,3 +163,6 @@ test*
 temp*
 proj*
 proj*/
+
+# Claude session notes -- local working record, not for the repo
+Claude_report.md
