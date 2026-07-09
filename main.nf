@@ -66,9 +66,12 @@ if (params.study_arm_col && !(params.study_arm_col in covarHeader)) {
     missingColumns << "--study_arm_col '${params.study_arm_col}' not found in --covarfile columns"
 }
 
-// time_col is used unconditionally by TABLEONE (modules/results.nf), not just
-// longitudinal/survival analyses, so it's always checked.
-if (params.time_col && !(params.time_col in phenoHeader)) {
+// time_col is passed to TABLEONE unconditionally, but bin/make_tableone.py
+// treats it as optional throughout (checks `if time_col_actual in merged.columns`
+// before ever using it, only meaningfully needed for KM plots under
+// --survival/--longitudinal) -- so only require it for those analysis modes,
+// not for a pure cross-sectional (linear_flag) run.
+if ((params.longitudinal_flag || params.survival_flag) && params.time_col && !(params.time_col in phenoHeader)) {
     missingColumns << "--time_col '${params.time_col}' not found in --phenofile columns"
 }
 
