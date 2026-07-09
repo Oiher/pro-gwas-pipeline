@@ -21,6 +21,69 @@ if (missingParams) {
 }
 
 /*
+ * Validate that requested phenotype/covariate columns actually exist in
+ * --phenofile / --covarfile before running anything. Without this, a typo'd
+ * column name only surfaces at EXPORT_PLINK/GWASGALLOP/GWASCPH -- after
+ * GENETICQCPLINK/MERGER_CHRS/GWASQC/MAKEANALYSISSETS/COMPUTE_PCA have all
+ * already run on a real dataset -- very costly to hit that late on a cloud run.
+ */
+def readHeaderColumns(path, label) {
+    def line
+    try {
+        line = file(path).withReader { it.readLine() }
+    } catch (Exception e) {
+        error("Could not read ${label} '${path}': ${e.message}")
+    }
+    if (!line) {
+        error("${label} '${path}' appears to be empty (no header line found).")
+    }
+    return line.split('\t').collect { it.trim() } as Set
+}
+
+def phenoHeader = readHeaderColumns(params.phenofile, '--phenofile')
+def covarHeader = readHeaderColumns(params.covarfile, '--covarfile')
+
+def missingColumns = []
+
+(params.pheno_name ?: '').split(/\s+/).findAll { it }.each { col ->
+    if (!(col in phenoHeader)) missingColumns << "--pheno_name '${col}' not found in --phenofile columns"
+}
+
+def numericList = (params.covar_numeric ?: '').split(/\s+/).findAll { it }
+numericList.each { col ->
+    // PC1/PC2/... are computed by COMPUTE_PCA and merged in later -- not
+    // expected to already exist in the raw --covarfile, so skip those.
+    if (!(col ==~ /(?i)^PC\d+$/) && !(col in covarHeader)) {
+        missingColumns << "--covar_numeric '${col}' not found in --covarfile columns"
+    }
+}
+
+(params.covar_categorical ?: '').split(/\s+/).findAll { it }.each { col ->
+    if (!(col in covarHeader)) missingColumns << "--covar_categorical '${col}' not found in --covarfile columns"
+}
+
+if (params.study_arm_col && !(params.study_arm_col in covarHeader)) {
+    missingColumns << "--study_arm_col '${params.study_arm_col}' not found in --covarfile columns"
+}
+
+// time_col is used unconditionally by TABLEONE (modules/results.nf), not just
+// longitudinal/survival analyses, so it's always checked.
+if (params.time_col && !(params.time_col in phenoHeader)) {
+    missingColumns << "--time_col '${params.time_col}' not found in --phenofile columns"
+}
+
+if (params.covar_interact && !(params.covar_interact in numericList)) {
+    missingColumns << "--covar_interact '${params.covar_interact}' must also be listed in --covar_numeric"
+}
+
+if (missingColumns) {
+    error("Phenotype/covariate column validation failed:\n" +
+          missingColumns.collect { "  - ${it}" }.join('\n') +
+          "\n\nphenofile ('${params.phenofile}') columns found: ${phenoHeader.sort()}" +
+          "\ncovarfile ('${params.covarfile}') columns found: ${covarHeader.sort()}")
+}
+
+/*
  * Main workflow log
  */
 if (params.longitudinal_flag) {
