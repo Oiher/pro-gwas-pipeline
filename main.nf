@@ -6,9 +6,7 @@
 nextflow.enable.dsl = 2
 
 /*
- * Validate required parameters up front. Without this, a missing --input/--covarfile/--phenofile
- * only surfaces much later as a generic "process input channel evaluates to null" error deep in
- * the DAG (e.g. at MAKEANALYSISSETS) -- costly to hit on a cloud/Google Batch run.
+ * Validate required parameters up front so failures surface immediately, not deep in the DAG.
  */
 def missingParams = []
 if (!params.input)     missingParams << '--input (path to genotype VCF/PLINK files)'
@@ -21,11 +19,8 @@ if (missingParams) {
 }
 
 /*
- * Validate that requested phenotype/covariate columns actually exist in
- * --phenofile / --covarfile before running anything. Without this, a typo'd
- * column name only surfaces at EXPORT_PLINK/GWASGALLOP/GWASCPH -- after
- * GENETICQCPLINK/MERGER_CHRS/GWASQC/MAKEANALYSISSETS/COMPUTE_PCA have all
- * already run on a real dataset -- very costly to hit that late on a cloud run.
+ * Validate that requested phenotype/covariate columns actually exist in the
+ * input files before running anything expensive.
  */
 def readHeaderColumns(path, label) {
     def line
@@ -51,8 +46,7 @@ def missingColumns = []
 
 def numericList = (params.covar_numeric ?: '').split(/\s+/).findAll { it }
 numericList.each { col ->
-    // PC1/PC2/... are computed by COMPUTE_PCA and merged in later -- not
-    // expected to already exist in the raw --covarfile, so skip those.
+    // PC1/PC2/... are computed later by COMPUTE_PCA, so skip checking them here.
     if (!(col ==~ /(?i)^PC\d+$/) && !(col in covarHeader)) {
         missingColumns << "--covar_numeric '${col}' not found in --covarfile columns"
     }
@@ -66,11 +60,8 @@ if (params.study_arm_col && !(params.study_arm_col in covarHeader)) {
     missingColumns << "--study_arm_col '${params.study_arm_col}' not found in --covarfile columns"
 }
 
-// time_col is passed to TABLEONE unconditionally, but bin/make_tableone.py
-// treats it as optional throughout (checks `if time_col_actual in merged.columns`
-// before ever using it, only meaningfully needed for KM plots under
-// --survival/--longitudinal) -- so only require it for those analysis modes,
-// not for a pure cross-sectional (linear_flag) run.
+// Only meaningfully used for survival/longitudinal KM plots (bin/make_tableone.py
+// treats it as optional otherwise), so don't require it for cross-sectional runs.
 if ((params.longitudinal_flag || params.survival_flag) && params.time_col && !(params.time_col in phenoHeader)) {
     missingColumns << "--time_col '${params.time_col}' not found in --phenofile columns"
 }
@@ -142,27 +133,16 @@ Channel
 
 Channel
    .fromPath(params.input)
-   // Fail fast if the glob matched nothing. Without this, an empty match here
-   // silently propagates to zero tasks in every downstream genotype-processing
-   // process, and the pipeline reports "succeeded" having done nothing -- e.g.
-   // a VWB-mounted resource path (/home/jupyter/...) used instead of the
-   // actual gs:// URI, or a typo in the glob.
+   // Fail fast if the glob matched nothing, rather than silently running zero
+   // downstream tasks and reporting "succeeded".
    .ifEmpty { error("No genotype files matched --input: '${params.input}'. Check the path/glob is correct and reachable -- on Google Batch this must be a real gs:// URI, not a local VM-mounted resource path.") }
    .map{ f -> tuple(f.getSimpleName(), f) }
    .set{ input_check_ch }
 
 /*
- * Guard against genetic_cache_key/genetic_data_id being reused across incompatible
- * input file sets (e.g. two analyses that each pre-filter the same "cohort" to a
- * different, non-overlapping sample subset, but share a genetic_data_id).
- * cache_raw above lists everything ever cached under this cache key on disk,
- * regardless of whether it belongs to THIS run's --input -- restrict it to only
- * fileTags this run's --input actually matches, and warn if stale entries were
- * found and excluded. Without this, MERGER_CHRS would silently merge chromosome
- * files from an unrelated, non-overlapping sample set into this run's dataset.
- * (List values are wrapped in an extra list -- Channel.combine() auto-flattens a
- * bare List value into separate tuple elements, so wrapping is what keeps it as
- * one list-typed value in the combined tuple.)
+ * Restrict cache_raw to fileTags this run's --input actually matches, so a reused
+ * genetic_data_id can't silently merge in an unrelated input set's chromosomes.
+ * (Lists are wrapped in an extra list since Channel.combine() auto-flattens bare lists.)
  */
 input_check_ch.map{ fileTag, f -> fileTag }.unique().toList()
     .map{ tags -> [tags] }
@@ -256,8 +236,6 @@ workflow {
         GENETICQCPLINK(plink_input_ch, reference_files)
         
         // Collect processing status for tracking
-        // NOTE: uses params.analyses_dir (conf/params.config), not a profile-level env{} var --
-        // see conf/params.config for why this was made an explicit param.
         GENETICQCPLINK.out.chunk_status
             .map{ fileTag, statusFile -> statusFile.text }
             .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv",

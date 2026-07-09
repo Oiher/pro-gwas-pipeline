@@ -479,9 +479,7 @@ process SIMPLE_QC {
 process GWASQC {
   publishDir "${params.analyses_dir}/${params.genetic_cache_key}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.h5"
   publishDir "${params.analyses_dir}/${params.genetic_cache_key}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.{html,png}"
-  // very_large: unlike GENETICQC/SPLIT_VCF (chunked/per-chromosome), this runs ancestry inference,
-  // king-cutoff kinship pruning, and PCA over the full genome-wide merged cohort in one task --
-  // memory scales with sample count and is the largest single-task memory footprint in the pipeline.
+  // Runs ancestry/kinship/PCA over the full genome-wide merged cohort in one task.
   label 'very_large'
 
   input:

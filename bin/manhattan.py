@@ -19,17 +19,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from qmplot import manhattanplot, qqplot
 
-# Significance thresholds for Manhattan plot labeling.
-# NOMINAL_P: "suggestive"/nominal significance -- also used as qmplot's
-#   sign_marker_p, which is what actually determines which variants become
-#   label candidates (qmplot's suggestiveline/genomewideline only draw the
-#   horizontal reference lines, they don't drive labeling). Set to the nominal
-#   threshold rather than MTC_P so BOTH nominally-significant and
-#   MTC-significant variants get labeled -- MTC significance is a strict
-#   subset of nominal significance, so this single threshold covers both.
-# MTC_P: standard GWAS genome-wide (multiple-testing-corrected) significance
-#   convention, used only for the reference line -- not recomputed per-run
-#   from the actual number of variants tested.
+# NOMINAL_P: nominal/suggestive significance, also used as qmplot's sign_marker_p
+# (the actual label-candidate threshold) since it's a superset of MTC_P.
+# MTC_P: standard GWAS genome-wide significance, reference line only.
 NOMINAL_P = 1e-5
 MTC_P = 5e-8
 
@@ -37,12 +29,8 @@ MTC_P = 5e-8
 def _style_variant_labels(ax):
     """Shrink and angle the variant-ID labels qmplot draws for significant SNPs.
 
-    qmplot's `is_annotate_topsnp`/`text_kws` don't actually control the label
-    Text objects' font size or rotation -- text_kws only reaches an invisible
-    empty-string connector annotation inside its vendored adjust_text(), not
-    the visible SNP-ID text (confirmed by reading qmplot's source). The label
-    Text objects land in `ax.texts` after manhattanplot() returns, so style
-    them directly there instead.
+    text_kws can't control this (only reaches an invisible connector annotation,
+    not the visible label), so style the Text objects in ax.texts directly instead.
     """
     for t in ax.texts:
         t.set_fontsize(t.get_fontsize() * 0.5)
@@ -61,18 +49,9 @@ def plot_summary_stats(data, cohort, outcome, model):
     """
     xtick = set(['chr' + i for i in list(map(str, range(1, 14))) + ['15', '17', '19', '22']])
 
-    # Shared kwargs: draws both significance lines, colors/labels variants
-    # crossing NOMINAL_P (which includes anything crossing MTC_P too) with
-    # their variant ID -- qmplot dedupes to one label per ~50kb LD block
-    # (ld_block_size) so a cluster of correlated significant SNPs at the same
-    # locus doesn't produce overlapping labels.
-    # text_kws.arrowprops: qmplot's internal adjust_text() repels labels away
-    # from each other and from data points to avoid overlap, which on dense
-    # real GWAS data (vs. a handful of well-separated hits) can push a label
-    # a real distance from its point. Without arrowprops, qmplot draws no
-    # connector at all, so a repositioned label looks like it's floating
-    # disconnected from any dot. This draws a thin leader line from each
-    # label back to its actual point.
+    # Draws both significance lines and labels variants crossing NOMINAL_P with their
+    # variant ID; arrowprops draws a leader line back to the point since qmplot's
+    # label-repulsion can otherwise leave labels looking disconnected from their dot.
     sig_kws = dict(
         snp="ID",
         suggestiveline=NOMINAL_P,
