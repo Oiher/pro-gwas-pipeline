@@ -19,23 +19,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from qmplot import manhattanplot, qqplot
 
-# NOMINAL_P: nominal/suggestive significance, also used as qmplot's sign_marker_p
-# (the actual label-candidate threshold) since it's a superset of MTC_P.
-# MTC_P: standard GWAS genome-wide significance, reference line only.
+# NOMINAL_P: nominal/suggestive significance line. MTC_P: genome-wide significance line.
 NOMINAL_P = 1e-5
 MTC_P = 5e-8
-
-
-def _style_variant_labels(ax):
-    """Shrink and angle the variant-ID labels qmplot draws for significant SNPs.
-
-    text_kws can't control this (only reaches an invisible connector annotation,
-    not the visible label), so style the Text objects in ax.texts directly instead.
-    """
-    for t in ax.texts:
-        t.set_fontsize(t.get_fontsize() * 0.5)
-        t.set_rotation(45)
-        t.set_rotation_mode("anchor")  # rotate around the anchor point, not the bbox center
 
 
 def plot_summary_stats(data, cohort, outcome, model):
@@ -49,16 +35,13 @@ def plot_summary_stats(data, cohort, outcome, model):
     """
     xtick = set(['chr' + i for i in list(map(str, range(1, 14))) + ['15', '17', '19', '22']])
 
-    # Draws both significance lines and labels variants crossing NOMINAL_P with their
-    # variant ID; arrowprops draws a leader line back to the point since qmplot's
-    # label-repulsion can otherwise leave labels looking disconnected from their dot.
+    # Draws the nominal/MTC significance reference lines. Variant-ID labeling was
+    # tried via qmplot's is_annotate_topsnp/sign_marker_p but removed -- on real
+    # data it mislabeled points (connector lines pointing to the wrong variant),
+    # and wasn't worth chasing further in a third-party library's internals.
     sig_kws = dict(
-        snp="ID",
         suggestiveline=NOMINAL_P,
         genomewideline=MTC_P,
-        sign_marker_p=NOMINAL_P,
-        is_annotate_topsnp=True,
-        text_kws=dict(arrowprops=dict(arrowstyle="-", color="black", alpha=0.6, lw=0.5)),
     )
 
     if model == "lmm_gallop":
@@ -71,7 +54,6 @@ def plot_summary_stats(data, cohort, outcome, model):
                       pv="Pi", ax=ax,
                       xtick_label_set=xtick,
                       **sig_kws)
-        _style_variant_labels(ax)
         plt.savefig(f"{cohort}_{outcome}_manhattan_intercept.{model}.png", dpi=300)
 
         # Intercept QQ plot
@@ -91,7 +73,6 @@ def plot_summary_stats(data, cohort, outcome, model):
                       pv="Ps", ax=ax,
                       xtick_label_set=xtick,
                       **sig_kws)
-        _style_variant_labels(ax)
         plt.savefig(f"{cohort}_{outcome}_manhattan_slope.{model}.png", dpi=300)
         
         # Slope QQ plot
@@ -114,7 +95,6 @@ def plot_summary_stats(data, cohort, outcome, model):
                       pv="P", ax=ax,
                       xtick_label_set=xtick,
                       **sig_kws)
-        _style_variant_labels(ax)
         plt.savefig(f"{cohort}_{outcome}_manhattan.{model}.png", dpi=300)
         
         # QQ plot
