@@ -34,6 +34,22 @@ NOMINAL_P = 1e-5
 MTC_P = 5e-8
 
 
+def _style_variant_labels(ax):
+    """Shrink and angle the variant-ID labels qmplot draws for significant SNPs.
+
+    qmplot's `is_annotate_topsnp`/`text_kws` don't actually control the label
+    Text objects' font size or rotation -- text_kws only reaches an invisible
+    empty-string connector annotation inside its vendored adjust_text(), not
+    the visible SNP-ID text (confirmed by reading qmplot's source). The label
+    Text objects land in `ax.texts` after manhattanplot() returns, so style
+    them directly there instead.
+    """
+    for t in ax.texts:
+        t.set_fontsize(t.get_fontsize() * 0.5)
+        t.set_rotation(45)
+        t.set_rotation_mode("anchor")  # rotate around the anchor point, not the bbox center
+
+
 def plot_summary_stats(data, cohort, outcome, model):
     """Generate Manhattan and QQ plots for GWAS summary statistics.
 
@@ -68,6 +84,7 @@ def plot_summary_stats(data, cohort, outcome, model):
                       pv="Pi", ax=ax,
                       xtick_label_set=xtick,
                       **sig_kws)
+        _style_variant_labels(ax)
         plt.savefig(f"{cohort}_{outcome}_manhattan_intercept.{model}.png", dpi=300)
 
         # Intercept QQ plot
@@ -87,6 +104,7 @@ def plot_summary_stats(data, cohort, outcome, model):
                       pv="Ps", ax=ax,
                       xtick_label_set=xtick,
                       **sig_kws)
+        _style_variant_labels(ax)
         plt.savefig(f"{cohort}_{outcome}_manhattan_slope.{model}.png", dpi=300)
         
         # Slope QQ plot
@@ -109,6 +127,7 @@ def plot_summary_stats(data, cohort, outcome, model):
                       pv="P", ax=ax,
                       xtick_label_set=xtick,
                       **sig_kws)
+        _style_variant_labels(ax)
         plt.savefig(f"{cohort}_{outcome}_manhattan.{model}.png", dpi=300)
         
         # QQ plot
