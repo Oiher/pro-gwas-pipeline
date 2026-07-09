@@ -19,10 +19,24 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from qmplot import manhattanplot, qqplot
 
+# Significance thresholds for Manhattan plot labeling.
+# NOMINAL_P: "suggestive"/nominal significance -- also used as qmplot's
+#   sign_marker_p, which is what actually determines which variants become
+#   label candidates (qmplot's suggestiveline/genomewideline only draw the
+#   horizontal reference lines, they don't drive labeling). Set to the nominal
+#   threshold rather than MTC_P so BOTH nominally-significant and
+#   MTC-significant variants get labeled -- MTC significance is a strict
+#   subset of nominal significance, so this single threshold covers both.
+# MTC_P: standard GWAS genome-wide (multiple-testing-corrected) significance
+#   convention, used only for the reference line -- not recomputed per-run
+#   from the actual number of variants tested.
+NOMINAL_P = 1e-5
+MTC_P = 5e-8
+
 
 def plot_summary_stats(data, cohort, outcome, model):
     """Generate Manhattan and QQ plots for GWAS summary statistics.
-    
+
     Args:
         data: pandas DataFrame with GWAS results
         cohort: Cohort name for plot titles and filenames
@@ -31,17 +45,31 @@ def plot_summary_stats(data, cohort, outcome, model):
     """
     xtick = set(['chr' + i for i in list(map(str, range(1, 14))) + ['15', '17', '19', '22']])
 
+    # Shared kwargs: draws both significance lines, colors/labels variants
+    # crossing NOMINAL_P (which includes anything crossing MTC_P too) with
+    # their variant ID -- qmplot dedupes to one label per ~50kb LD block
+    # (ld_block_size) so a cluster of correlated significant SNPs at the same
+    # locus doesn't produce overlapping labels.
+    sig_kws = dict(
+        snp="ID",
+        suggestiveline=NOMINAL_P,
+        genomewideline=MTC_P,
+        sign_marker_p=NOMINAL_P,
+        is_annotate_topsnp=True,
+    )
+
     if model == "lmm_gallop":
         # GALLOP longitudinal model - plot both intercept and slope
-        
+
         # Intercept Manhattan plot
         f, ax = plt.subplots(figsize=(15, 7), facecolor="w", edgecolor="k")
         manhattanplot(data=data,
                       title=f"Manhattan Intercept {cohort} {outcome}",
-                      pv="Pi", ax=ax, 
-                      xtick_label_set=xtick)
+                      pv="Pi", ax=ax,
+                      xtick_label_set=xtick,
+                      **sig_kws)
         plt.savefig(f"{cohort}_{outcome}_manhattan_intercept.{model}.png", dpi=300)
-        
+
         # Intercept QQ plot
         f, ax = plt.subplots(figsize=(15, 7), facecolor="w", edgecolor="k")
         qqplot(data=data["Pi"],
@@ -51,13 +79,14 @@ def plot_summary_stats(data, cohort, outcome, model):
                ylabel=r"Observed -log(P)",
                ax=ax)
         plt.savefig(f"{cohort}_{outcome}_qq_intercept.{model}.png", dpi=300)
-        
+
         # Slope Manhattan plot
         f, ax = plt.subplots(figsize=(15, 7), facecolor="w", edgecolor="k")
         manhattanplot(data=data,
                       title=f"Manhattan Slope {cohort} {outcome}",
-                      pv="Ps", ax=ax, 
-                      xtick_label_set=xtick)
+                      pv="Ps", ax=ax,
+                      xtick_label_set=xtick,
+                      **sig_kws)
         plt.savefig(f"{cohort}_{outcome}_manhattan_slope.{model}.png", dpi=300)
         
         # Slope QQ plot
@@ -78,7 +107,8 @@ def plot_summary_stats(data, cohort, outcome, model):
         manhattanplot(data=data,
                       title=f"Manhattan {model} {cohort} {outcome}",
                       pv="P", ax=ax,
-                      xtick_label_set=xtick)
+                      xtick_label_set=xtick,
+                      **sig_kws)
         plt.savefig(f"{cohort}_{outcome}_manhattan.{model}.png", dpi=300)
         
         # QQ plot
