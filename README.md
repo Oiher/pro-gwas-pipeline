@@ -176,6 +176,7 @@ The pipeline has pre-defined profiles for different execution environments. You 
 - `biowulf`: Biowulf cluster execution with Singularity
 - `biowulflocal`: Biowulf local execution without job submission
 - `gcb_final`: Google Cloud Batch execution (default settings target Verily Workbench; override `gcb_container`/`gcb_use_private_address` for other GCP projects -- see `conf/params.config`)
+- `gcb_scaleable`: same as `gcb_final`, but the per-process `maxForks` caps scale from `gcb_ssd_quota_gb`/`gcb_cpu_quota` params instead of assuming `gcb_final`'s tuned 500GB SSD / 200 CPU baseline -- use this if your GCP project/region has a different regional quota. Both profiles print your project's actual detected quota vs. the configured values at the start of every run (see Troubleshooting) so you know whether/how to set these params without running anything manually.
 
 These profiles can be customized in [conf/profiles/](conf/profiles/) folder.
 
@@ -457,6 +458,31 @@ If the pipeline fails, check the following:
   - Input file format errors (VCF/PLINK) --> validate input files
   - Missing reference files --> download using provided script `bin/download_references.sh`
   - Insufficient resources (memory/CPU) --> adjust resource parameters in the profile configs
+
+### `CODE_GCE_QUOTA_EXCEEDED` on Google Batch (`-profile gcb_final`/`gcb_scaleable`)
+
+```
+WARN: Batch job cannot be run: VM in Managed Instance Group meets error: Batch Error: code - CODE_GCE_QUOTA_EXCEEDED, description - ... Quota 'SSD_TOTAL_GB' exceeded. Limit: 500.0 in region europe-west4.
+```
+(or `Quota 'CPUS' exceeded`) means the GCP project's regional quota is temporarily full. Google Batch and Nextflow both retry automatically, and the stuck task usually resumes once quota frees up as other concurrent tasks finish -- but retries aren't unlimited (`maxRetries = 5`), so under sustained quota pressure a task (and then the run) can still fail outright rather than just being delayed.
+
+If a task does fail, `-resume` is safe regardless: Nextflow only caches tasks that finished successfully, so a failed task is always re-run from scratch in a fresh work directory, never resumed from a partial/truncated state.
+
+**Every run on `gcb_final`/`gcb_scaleable` automatically checks your project's actual quota** (via `bin/detect_gcp_quota.sh`, run once at launch, best-effort) and prints a comparison against the configured `maxForks` assumptions before any processes start, e.g.:
+```
+Detecting available CPU/SSD resources...
+ SSD: 750GB | CPU: 300 cores (detected for region europe-west4)
+
+ Current configuration:
+   gcb_ssd_quota_gb: 500
+   gcb_cpu_quota: 200
+ NOTE: detected quota differs from the configured values above -- consider passing
+ --gcb_ssd_quota_gb 750 --gcb_cpu_quota 300 with -profile gcb_scaleable
+ for optimal parallelization.
+```
+If detection fails (no `gcloud`, no permission, or a timeout) it falls back to a static note instead -- this never blocks or fails the run either way. `conf/profiles/gcb_final.config`'s `maxForks`/`disk` values assume a 500GB SSD / 200 CPU regional quota (this project's `europe-west4` limits at the time of tuning); if the printed comparison shows a mismatch, switch to `-profile gcb_scaleable` and pass the detected values as shown above so `maxForks` scales proportionally instead of assuming that baseline.
+
+**The long-term fix is requesting a GCP quota increase** (IAM & Admin → Quotas, for the affected metric and region) rather than permanently tuning around a fixed ceiling.
 
 If pipeline ran succssessfully but results look off:
 - Check the number of jobs in each process

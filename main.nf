@@ -109,6 +109,61 @@ log.info """\
  genetic cache key                        : ${params.genetic_cache_key}
  """
 
+// Google Batch quota errors are common and not fatal -- see README.md's Troubleshooting
+// section for what to expect. Every run on a gcb_final/gcb_scaleable profile, try to detect
+// the project's actual SSD/CPU quota and compare it against the configured maxForks
+// assumptions, so a mismatch is visible before hitting CODE_GCE_QUOTA_EXCEEDED rather than
+// after. Best-effort only: quota rarely changes, detection is cheap, but this must never
+// block or fail the run if gcloud is unavailable or lacks permission -- falls back to a
+// static note on any error.
+if (workflow.profile?.contains('gcb_final') || workflow.profile?.contains('gcb_scaleable')) {
+    def region = 'europe-west4'  // must match conf/profiles/gcb_final.config's google.region
+    def configuredSsd = params.containsKey('gcb_ssd_quota_gb') ? params.gcb_ssd_quota_gb : 500
+    def configuredCpu = params.containsKey('gcb_cpu_quota') ? params.gcb_cpu_quota : 200
+    def detected = null
+    try {
+        println "Detecting available CPU/SSD resources..."
+        def proc = ["bash", "${projectDir}/bin/detect_gcp_quota.sh", region].execute()
+        def out = new StringBuilder(), err = new StringBuilder()
+        proc.consumeProcessOutput(out, err)
+        // waitForOrKill's return value is not a useful success/timeout signal (it's null
+        // either way -- confirmed empirically); exitValue() correctly reflects 0 on success
+        // and a signal-derived code (e.g. 143) if this killed it for running too long.
+        proc.waitForOrKill(15000)
+        if (proc.exitValue() == 0) {
+            def ssdMatch = out.toString() =~ /gcb_ssd_quota_gb:\s*(\d+)/
+            def cpuMatch = out.toString() =~ /gcb_cpu_quota:\s*(\d+)/
+            if (ssdMatch.find() && cpuMatch.find()) {
+                detected = [ssd: ssdMatch.group(1) as int, cpu: cpuMatch.group(1) as int]
+            }
+        }
+    } catch (Exception e) {
+        // fall through to the static note below
+    }
+
+    if (detected) {
+        def mismatch = detected.ssd != (configuredSsd as int) || detected.cpu != (configuredCpu as int)
+        log.info """\
+ SSD: ${detected.ssd}GB | CPU: ${detected.cpu} cores (detected for region ${region})
+
+ Current configuration:
+   gcb_ssd_quota_gb: ${configuredSsd}
+   gcb_cpu_quota: ${configuredCpu}
+${mismatch ? " NOTE: detected quota differs from the configured values above -- consider passing\n --gcb_ssd_quota_gb ${detected.ssd} --gcb_cpu_quota ${detected.cpu} with -profile gcb_scaleable\n for optimal parallelization." : " Configured values match detected quota."}
+ If available resources are too low, consider requesting a GCP quota increase.
+ """
+    } else {
+        log.info """\
+ NOTE: on Google Batch you may see `WARN: ... CODE_GCE_QUOTA_EXCEEDED ...`
+ (SSD_TOTAL_GB or CPUS). This is not fatal -- Google Batch/Nextflow retry
+ automatically, and the pipeline resumes once quota frees up. Could not
+ auto-detect this project's actual quota (gcloud unavailable, no permission,
+ or timed out) -- run bin/detect_gcp_quota.sh manually to check, or see
+ README.md's Troubleshooting section if it recurs often.
+ """
+    }
+}
+
 /*
  * Datetime
  */
