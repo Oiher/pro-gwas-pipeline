@@ -35,6 +35,22 @@ def readHeaderColumns(path, label) {
     return line.split('\t').collect { it.trim() } as Set
 }
 
+// Counts data rows where colName isn't 0/1 (or blank/NA for missing). Used to catch a
+// continuous phenotype being passed to survival_flag, which fails silently deep in coxph().
+def countNonBinaryValues(path, colName) {
+    def lines = file(path).readLines()
+    if (lines.size() < 2) return 0
+    def header = lines[0].split('\t')
+    def idx = header.findIndexOf { it.trim() == colName }
+    if (idx < 0) return 0
+    def validValues = ['0', '1', '0.0', '1.0', '', 'NA', 'NaN'] as Set
+    return lines.drop(1).count { line ->
+        if (!line.trim()) return false
+        def fields = line.split('\t')
+        idx < fields.size() && !(fields[idx].trim() in validValues)
+    }
+}
+
 def phenoHeader = readHeaderColumns(params.phenofile, '--phenofile')
 def covarHeader = readHeaderColumns(params.covarfile, '--covarfile')
 
@@ -60,10 +76,37 @@ if (params.study_arm_col && !(params.study_arm_col in covarHeader)) {
     missingColumns << "--study_arm_col '${params.study_arm_col}' not found in --covarfile columns"
 }
 
-// Only meaningfully used for survival/longitudinal KM plots (bin/make_tableone.py
-// treats it as optional otherwise), so don't require it for cross-sectional runs.
-if ((params.longitudinal_flag || params.survival_flag) && params.time_col && !(params.time_col in phenoHeader)) {
-    missingColumns << "--time_col '${params.time_col}' not found in --phenofile columns"
+// longitudinal_flag and survival_flag both depend on time_col downstream (bin/gallop.py's
+// --time-name, bin/survival.R's --time-col, and KM plots in bin/make_tableone.py), so require
+// it to be set and present rather than silently skipping validation if it's ever unset.
+if (params.longitudinal_flag || params.survival_flag) {
+    if (!params.time_col) {
+        missingColumns << "--time_col must be set when longitudinal_flag or survival_flag is true"
+    } else if (!(params.time_col in phenoHeader)) {
+        missingColumns << "--time_col '${params.time_col}' not found in --phenofile columns"
+    }
+}
+
+// survival_flag needs a real time-to-event shape: explicit tstart/tend interval columns
+// (bin/survival.R builds Surv(tstart, tend, ...) directly from them) and a binary 0/1 event
+// indicator for pheno_name -- a continuous score fails coxph() per-SNP silently (caught by a
+// tryCatch that just logs to stderr), producing an all-NA result file with no visible error.
+if (params.survival_flag) {
+    ['tstart', 'tend'].each { col ->
+        if (!(col in phenoHeader)) {
+            missingColumns << "--phenofile must contain a '${col}' column when survival_flag is true " +
+                              "(see conf/examples/test_survival.yml / example/phenotype.surv.tsv)"
+        }
+    }
+    (params.pheno_name ?: '').split(/\s+/).findAll { it }.each { col ->
+        if (col in phenoHeader) {
+            def badRows = countNonBinaryValues(params.phenofile, col)
+            if (badRows > 0) {
+                missingColumns << "--pheno_name '${col}' has ${badRows} row(s) with non-binary values -- " +
+                                  "survival_flag requires a 0/1 event indicator, not a continuous score"
+            }
+        }
+    }
 }
 
 if (params.covar_interact && !(params.covar_interact in numericList)) {
