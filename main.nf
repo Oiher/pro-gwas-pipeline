@@ -76,16 +76,19 @@ if (params.study_arm_col && !(params.study_arm_col in covarHeader)) {
     missingColumns << "--study_arm_col '${params.study_arm_col}' not found in --covarfile columns"
 }
 
-// longitudinal_flag and survival_flag both depend on time_col downstream (bin/gallop.py's
-// --time-name, bin/survival.R's --time-col, and KM plots in bin/make_tableone.py), so require
-// it to be set and present rather than silently skipping validation if it's ever unset.
-if (params.longitudinal_flag || params.survival_flag) {
+// longitudinal_flag requires time_col: bin/gallop.py's --time-name is read unconditionally
+// (df['time'] = df[time_name], no fallback), so a missing/absent time_col crashes GALLOP.
+if (params.longitudinal_flag) {
     if (!params.time_col) {
-        missingColumns << "--time_col must be set when longitudinal_flag or survival_flag is true"
+        missingColumns << "--time_col must be set when longitudinal_flag is true"
     } else if (!(params.time_col in phenoHeader)) {
         missingColumns << "--time_col '${params.time_col}' not found in --phenofile columns"
     }
 }
+// survival_flag does NOT require time_col: tstart/tend are already mandatory below, so
+// bin/survival.R never reaches its time_col-based auto-derive branch. time_col is only used
+// for optional KM plots (bin/make_tableone.py), which already skips them gracefully if the
+// column is absent -- no need to fail the whole run over it.
 
 // survival_flag needs a real time-to-event shape: explicit tstart/tend interval columns
 // (bin/survival.R builds Surv(tstart, tend, ...) directly from them) and a binary 0/1 event
