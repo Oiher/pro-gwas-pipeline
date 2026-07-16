@@ -115,6 +115,15 @@ def main():
                         else:
                             print(f"Skipping standardization for {col} (constant variable)")
         
+        # Fill any remaining missing numeric covariate values with plink2's "NA" missing-value
+        # token -- same reasoning as the phenotype fix below: pandas' to_csv writes NaN as an
+        # empty string, which plink2's tokenizer collapses instead of treating as a valid field.
+        for col in covar_num:
+            if col in d_set.columns and d_set[col].isna().any():
+                n_missing = d_set[col].isna().sum()
+                d_set[col] = d_set[col].astype(object).where(d_set[col].notna(), 'NA')
+                print(f"Numeric covariate '{col}': filled {n_missing} missing values with 'NA'")
+
         # Skip standardization for categorical dummy variables (they're already 0/1)
         for dummy_col in categorical_dummies:
             if dummy_col in d_set.columns:
@@ -133,7 +142,17 @@ def main():
                     # Already in PLINK format, ensure missing is -9
                     d_set[pheno_col] = d_set[pheno_col].fillna(-9).astype(int)
                     print(f"Phenotype '{pheno_col}' already in PLINK format 1/2/-9")
-        
+                elif d_set[pheno_col].isna().any():
+                    # Quantitative phenotype with missing values: pandas' to_csv writes NaN as
+                    # an empty string by default, but plink2's tokenizer collapses empty fields
+                    # instead of treating them as valid tokens, shifting every later column on
+                    # that row and causing a hard-to-diagnose "fewer tokens" error -- only when
+                    # a non-last phenotype/covariate happens to be missing. Use plink2's "NA"
+                    # missing-value token instead so the field is never empty.
+                    n_missing = d_set[pheno_col].isna().sum()
+                    d_set[pheno_col] = d_set[pheno_col].astype(object).where(d_set[pheno_col].notna(), 'NA')
+                    print(f"Quantitative phenotype '{pheno_col}': filled {n_missing} missing values with 'NA'")
+
         # Extract all covariate column names (numeric + categorical dummies)
         all_covar_cols = [col for col in d_set.columns if col not in ["IID"] + all_phenos]
         
@@ -191,8 +210,9 @@ def main():
                     # Binary phenotype in PLINK format: count only 1 and 2
                     n_valid = ((d_set[pheno_col] == 1) | (d_set[pheno_col] == 2)).sum()
                 else:
-                    # Quantitative phenotype: count non-missing
-                    n_valid = d_set[pheno_col].notna().sum()
+                    # Quantitative phenotype: count non-missing (excludes the 'NA' string token
+                    # used to fill missing values above, which .notna() alone wouldn't catch)
+                    n_valid = (d_set[pheno_col].notna() & (d_set[pheno_col] != 'NA')).sum()
                 print(f"  {pheno_col}: {n_valid} samples with valid values")
         
         print()
