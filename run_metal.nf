@@ -75,7 +75,11 @@ process RUN_METAL {
     publishDir "${params.metal_outdir}", mode: 'copy', overwrite: true
 
     input:
-    tuple val(pheno), path(sumstats_files)
+    // Files from different cohorts share identical basenames (e.g. EUR_case_UPDRS_pI_allresults.tsv
+    // -- cohort identity lives only in the parent directory, not the filename), which would
+    // otherwise collide when staged flat into one task directory. stageAs numbers each file into
+    // its own subdirectory (input01/, input02/, ...) to keep them apart.
+    tuple val(pheno), path(sumstats_files, stageAs: 'input??/*')
 
     output:
     path "${prefix}_metal_script.txt", emit: script
@@ -113,7 +117,11 @@ METAL_EOF
 
     for f in ${sumstats_files}; do
       base=\$(basename "\$f")
-      out="prepared/\${base%.gz}.metal.tsv"
+      # Prefix with the input## staging subdirectory (see stageAs above) since two cohorts'
+      # files can share the same basename -- without this, the second cohort's prepared file
+      # would silently overwrite the first's here.
+      tag=\$(basename "\$(dirname "\$f")")
+      out="prepared/\${tag}_\${base%.gz}.metal.tsv"
 
       ( [[ "\$f" == *.gz ]] && zcat "\$f" || cat "\$f" ) | awk -v count_file="\${out}.counts" 'BEGIN{FS=OFS="\\t"; c_ref=0; c_alt=0}
         NR==1 {
