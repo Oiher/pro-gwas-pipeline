@@ -12,17 +12,32 @@ nextflow.enable.dsl = 2
  *  This pipeline adds A2 column based on A1 and REF/ALT
  *
  * Optional:
- *   --metal_outdir   Output directory (default: "${launchDir}/metal_results")
- *   --metal_prefix   Output prefix (default: "SURV_META")
+ *   --metal_outdir      Output directory (default: "${launchDir}/metal_results")
+ *   --metal_prefix      Output prefix (default: "SURV_META")
+ *   --metal_pheno_name  Comma-separated phenotype names (e.g. "UPDRS_pI,UPDRS_pII"). When set,
+ *                       --metal_input may span multiple phenotypes at once (e.g. across cohorts) --
+ *                       files are grouped by phenotype (matched via filename suffix
+ *                       "_<phenotype>_allresults.tsv") and one METAL run is performed per
+ *                       phenotype, each producing its own "${metal_prefix}_<phenotype>*" output.
+ *                       Omit to combine every matched file into a single run (old behavior).
  */
 
-params.metal_input  = params.metal_input ?: null
-params.metal_outdir = params.metal_outdir ?: "${launchDir}/metal_results"
-params.metal_prefix = params.metal_prefix ?: "SURV_META"
+params.metal_input       = params.metal_input ?: null
+params.metal_outdir      = params.metal_outdir ?: "${launchDir}/metal_results"
+params.metal_prefix      = params.metal_prefix ?: "SURV_META"
+params.metal_pheno_name  = params.metal_pheno_name ?: null
 
 if (!params.metal_input) {
     error "Missing required parameter: --metal_input"
 }
+
+// Mirrors main.nf's parsePhenoNames (main.nf:59-61) exactly. Duplicated here rather than
+// shared, since this script has no include/shared-lib wiring to main.nf.
+def parsePhenoNames(value) {
+    (value ?: '').split(',').collect { it.trim() }.findAll { it }
+}
+
+def phenoNames = parsePhenoNames(params.metal_pheno_name)
 
 def inputPatterns = params.metal_input
     .toString()
@@ -30,32 +45,54 @@ def inputPatterns = params.metal_input
     .collect { it.trim() }
     .findAll { it }
 
+// Suffix match against the known --metal_pheno_name list, not positional string-splitting -- the
+// pop_studyarm token (e.g. "EUR_case") can itself contain underscores, so a fixed-position
+// split would misparse. Longest match wins in case one phenotype name is a suffix of another.
+def matchPhenoName(filename, names) {
+    def base = filename.replaceAll(/\.gz$/, '')
+    def matches = names.findAll { base.endsWith("_${it}_allresults.tsv") }
+    matches ? matches.max { it.length() } : null
+}
+
 Channel
     .fromPath(inputPatterns, checkIfExists: true)
     .ifEmpty { error "No files matched --metal_input: ${params.metal_input}" }
-    .collect()
-    .set { metal_input_files_ch }
+    .map { f ->
+        def pheno = phenoNames ? matchPhenoName(f.getName(), phenoNames) : ''
+        if (phenoNames && pheno == null) {
+            error "File matched by --metal_input does not correspond to any --metal_pheno_name " +
+                  "(${phenoNames.join(', ')}): ${f}\n" +
+                  "Expected filename to end with '_<phenotype>_allresults.tsv'. " +
+                  "Either tighten --metal_input to exclude it, or add its phenotype to --metal_pheno_name."
+        }
+        tuple(pheno, f)
+    }
+    .groupTuple()
+    .set { metal_input_groups_ch }
 
 process RUN_METAL {
     label 'medium'
     publishDir "${params.metal_outdir}", mode: 'copy', overwrite: true
 
     input:
-    path sumstats_files
+    tuple val(pheno), path(sumstats_files)
 
     output:
-    path "${params.metal_prefix}_metal_script.txt", emit: script
+    path "${prefix}_metal_script.txt", emit: script
     path "prepared/*.metal.tsv.gz", emit: prepared
-    path "${params.metal_prefix}_command.log", emit: log, optional: true
-    path "${params.metal_prefix}*", emit: results
+    path "${prefix}_command.log", emit: log, optional: true
+    path "${prefix}*", emit: results
 
     script:
+    // No `def` here -- output: needs `prefix` in shared process scope (same def-scoping
+    // gotcha as modules/gwas.nf's `outfile`: a def-scoped local is invisible to output:).
+    prefix = pheno ? "${params.metal_prefix}_${pheno}" : params.metal_prefix
     """
     set -euo pipefail
 
     mkdir -p prepared
 
-    cat > ${params.metal_prefix}_metal_script.txt << 'METAL_EOF'
+    cat > ${prefix}_metal_script.txt << 'METAL_EOF'
 SCHEME STDERR
 GENOMICCONTROL OFF
 AVERAGEFREQ ON
@@ -105,23 +142,23 @@ METAL_EOF
 
       echo "[A2_BUILD] file=\$base A1_EQ_REF=\$a1_eq_ref A1_EQ_ALT=\$a1_eq_alt"
       gzip -f "\$out"
-      echo "PROCESS \${out}.gz" >> ${params.metal_prefix}_metal_script.txt
+      echo "PROCESS \${out}.gz" >> ${prefix}_metal_script.txt
     done
-    
+
     echo "[A2_BUILD] total A1_EQ_REF=\$total_ref A1_EQ_ALT=\$total_alt"
 
-    cat >> ${params.metal_prefix}_metal_script.txt << METAL_EOF
-OUTFILE ${params.metal_prefix} .TBL
+    cat >> ${prefix}_metal_script.txt << METAL_EOF
+OUTFILE ${prefix} .TBL
 ANALYZE HETEROGENEITY
 QUIT
 METAL_EOF
 
-    metal ${params.metal_prefix}_metal_script.txt
-    
-    cp .command.log ${params.metal_prefix}_command.log || true
+    metal ${prefix}_metal_script.txt
+
+    cp .command.log ${prefix}_command.log || true
     """
 }
 
 workflow {
-    RUN_METAL(metal_input_files_ch)
+    RUN_METAL(metal_input_groups_ch)
 }

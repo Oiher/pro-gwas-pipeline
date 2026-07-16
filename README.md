@@ -422,6 +422,12 @@ Expected input columns (tab-delimited): `ID(chr:pos:ref:alt)`, `REF`, `ALT`, `A1
 
 If the input is from GWASGALLOP, then modify the `run_metal.nf` to select the correct columns such as `BETAi`, `SEi`, `Pi` for intercept and `BETAs`, `SEs`, `Ps` for slope effect for the variants.
 
+#### Cross-cohort meta-analysis (`--metal_pheno_name`)
+
+If you're meta-analyzing the same phenotype(s) across multiple separately-run cohorts (each cohort a distinct `main.nf` run, e.g. `UPDRS_NSPARK_CS`, `UPDRS_ICEBERG_CS`, `UPDRS_COPN_CS`), pass `--metal_pheno_name` (comma-separated) alongside a single `--metal_input` glob that spans every cohort's output. Files are grouped by phenotype (matched via the filename suffix `_<phenotype>_allresults.tsv`, which `main.nf`'s `SAVEGWAS`/`TABLEONE` already produce per-phenotype), and one METAL run is performed per phenotype in a single `nextflow run` invocation, each producing its own `${metal_prefix}_<phenotype>*` output. Omit `--metal_pheno_name` to combine every matched file into one run (original behavior, still the default). This is a separate `--metal_pheno_name` param, not `--pheno_name` (`main.nf`'s own phenotype param) -- `run_metal.nf` is normally launched from the repo root, so it inherits `nextflow.config`'s shared defaults, and reusing `--pheno_name` here would silently pick up `main.nf`'s default (`'y'`) instead of behaving as unset. See `conf/examples/metal_cross_cohort.yml` for a complete example.
+
+This only needs to run once all the individual cohorts' `main.nf` runs have completed — it reads their already-published `*_allresults.tsv` outputs and isn't wired into `main.nf`'s own DAG.
+
 #### Example
 Do meta-analysis for survival results of EUR and AJ populations with google cloud batch.
 
@@ -436,12 +442,12 @@ gcb_use_private_address: false
 
 Then run this command to execute the METAL meta-analysis:
 ```bash
-nextflow run metal.nf -profile gcb_final -params-file metal_surv.yml
+nextflow run run_metal.nf -profile gcb_final -params-file metal_surv.yml
 ```
 
 Or run directly:
 ```bash
-nextflow run metal.nf -profile gcb_final \
+nextflow run run_metal.nf -profile gcb_final \
   --metal_input "gs://bucket/path/EUR_*_SURV_results.tsv.gz,gs://bucket/path/AJ_*_SURV_results.tsv.gz" \
   --metal_outdir "gs://bucket/path/META/SURV" \
   --metal_prefix "HY_SURV_META" \
