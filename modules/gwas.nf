@@ -44,6 +44,12 @@ process GWASGLM {
     echo "Total covariates: \${N_COVAR}"
     echo "Processing phenotypes: ${pheno_list}"
 
+    # Guard: EXPORT_PLINK already validates this file is well-formed when it writes it, but
+    # plink2 parses it as plain tab-delimited text with no CSV-quoting awareness -- if staging
+    # this file into the task corrupts it (e.g. a truncated/partial copy), plink2's own error
+    # deep inside --glm is hard to diagnose. Fail here instead, with the exact bad line visible.
+    awk -F'\\t' 'NR==1{n=NF; next} NF!=n{print "ERROR: ${samplelist} line "NR" has "NF" fields, expected "n" (from header). Line (truncated): "substr(\$0,1,200); exit 1}' "${samplelist}"
+
     # Build FID/IID keep list from phenotype/covariate table using FID lookup from psam.
     make_keep_iid.py --input "${samplelist}" --output "${outfile}.keep.iid.tsv" --psam "${psam}"
     
