@@ -51,12 +51,21 @@ def countNonBinaryValues(path, colName) {
     }
 }
 
+// Single source of truth for splitting --pheno_name into individual names -- comma-separated,
+// matching the phenonames channel below (Channel.fromList). Previously the validation loops
+// split on whitespace while the channel split on comma, so neither delimiter worked reliably
+// for every consumer (GWASGLM tolerated space-separated by luck; GWASGALLOP/GWASCPH's `each`
+// fan-out did not). Trims each name since splitCsv/split(',') don't strip surrounding spaces.
+def parsePhenoNames(value) {
+    (value ?: '').split(',').collect { it.trim() }.findAll { it }
+}
+
 def phenoHeader = readHeaderColumns(params.phenofile, '--phenofile')
 def covarHeader = readHeaderColumns(params.covarfile, '--covarfile')
 
 def missingColumns = []
 
-(params.pheno_name ?: '').split(/\s+/).findAll { it }.each { col ->
+parsePhenoNames(params.pheno_name).each { col ->
     if (!(col in phenoHeader)) missingColumns << "--pheno_name '${col}' not found in --phenofile columns"
 }
 
@@ -101,7 +110,7 @@ if (params.survival_flag) {
                               "(see conf/examples/test_survival.yml / example/phenotype.surv.tsv)"
         }
     }
-    (params.pheno_name ?: '').split(/\s+/).findAll { it }.each { col ->
+    parsePhenoNames(params.pheno_name).each { col ->
         if (col in phenoHeader) {
             def badRows = countNonBinaryValues(params.phenofile, col)
             if (badRows > 0) {
@@ -265,12 +274,11 @@ cache_raw
     .map{ fileTag, fCache, validTags -> tuple(fileTag, fCache) }
     .set{ cache }
 
-/* 
+/*
  * Get the phenotypes arg on a channel
  */
 Channel
-    .of(params.pheno_name)
-    .splitCsv(header: false)
+    .fromList(parsePhenoNames(params.pheno_name))
     .collect()
     .set{ phenonames }
 
