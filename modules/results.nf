@@ -72,6 +72,7 @@ process TABLEONE {
     path(analytical_set)
     path(covarfile)
     path(phenofile)
+    each phenoname
 
   output:
     path "table1_*.csv", optional: true
@@ -83,7 +84,7 @@ process TABLEONE {
         ${covarfile} \\
         ${phenofile} \\
         ${analytical_set} \\
-        --pheno-name '${params.pheno_name}' \\
+        --pheno-name '${phenoname}' \\
         --study-arm-col '${params.study_arm_col}' \\
         --time-col '${params.time_col}' \\
         --ancestry '${params.ancestry}' \\

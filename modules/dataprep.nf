@@ -260,7 +260,9 @@ process EXPORT_PLINK {
 
     def pheno_name = "y"
     if (params.pheno_name != '') {
-      pheno_name = "${params.pheno_name}"
+      // --pheno_name is comma-separated (see main.nf's parsePhenoNames), but
+      // export_plink_preprocess.py expects space-separated (args.pheno_name.split()) -- convert here.
+      pheno_name = params.pheno_name.split(',').collect{ it.trim() }.findAll{ it }.join(' ')
     }
 
     """

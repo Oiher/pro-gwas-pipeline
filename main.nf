@@ -599,7 +599,10 @@ workflow {
     // ==================================================================================
     // TABLE 1 AND DESCRIPTIVE STATISTICS
     // ==================================================================================
-    TABLEONE(MAKEANALYSISSETS.out.analytical_set, file(params.covarfile), file(params.phenofile))
+    // Fans out one task per phenotype, mirroring GWASGLM/GWASGALLOP/GWASCPH/MANHATTAN, so each
+    // phenotype gets its own Table 1 (and KM curve, for survival_flag) instead of one global
+    // table that could only ever describe a single phenotype.
+    TABLEONE(MAKEANALYSISSETS.out.analytical_set, file(params.covarfile), file(params.phenofile), phenonames)
 }
 
 /*
