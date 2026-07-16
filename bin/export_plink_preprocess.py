@@ -159,7 +159,28 @@ def main():
         print(f"Covariate order: {covar_names_str}")
         
         # Save single file with all phenotypes (plink2 --glm handles missing phenotypes automatically)
-        d_set.to_csv(f"{args.outfile}_filtered.pca.pheno.tsv", sep="\t", index=False)
+        output_path = f"{args.outfile}_filtered.pca.pheno.tsv"
+        d_set.to_csv(output_path, sep="\t", index=False)
+
+        # plink2 parses this file as plain tab-delimited text with no CSV-quoting awareness.
+        # A field value with an embedded tab/newline (most likely IID, the only column here
+        # that's a raw unprocessed string) would make pandas CSV-quote it -- splitting it across
+        # physical lines -- which plink2 then reads as a short line. Catch that here, with the
+        # offending line number and content, instead of a hard-to-debug plink2 failure later
+        # (task scratch dirs are wiped on failure, so this may be the only surviving evidence).
+        with open(output_path) as f:
+            header_fields = f.readline().rstrip('\n').split('\t')
+            expected_n = len(header_fields)
+            for lineno, line in enumerate(f, start=2):
+                n_fields = len(line.rstrip('\n').split('\t'))
+                if n_fields != expected_n:
+                    raise ValueError(
+                        f"{output_path} line {lineno} has {n_fields} tab-separated fields, "
+                        f"expected {expected_n} (header: {header_fields}). This usually means "
+                        f"a field value (most likely IID) contains an embedded tab or newline "
+                        f"character. Offending line (truncated): {line[:200]!r}"
+                    )
+
         print(f"\nCreated {args.outfile}_filtered.pca.pheno.tsv with {d_set.shape[0]} samples")
         print(f"Phenotypes: {', '.join(all_phenos)}")
         for pheno_col in all_phenos:
